@@ -7,7 +7,6 @@ import CourseDetailView from '@/views/CourseDetailView.vue'
 import CreateCourseView from '@/views/CreateCourseView.vue'
 import PaymentSuccessView from '@/views/PaymentSuccessView.vue'
 import PaymentCancelView from '@/views/PaymentCancelView.vue'
-// 🎯 关键：导入新的课程列表视图
 import CourseListView from '@/views/CourseListView.vue' 
 
 const router = createRouter({
@@ -17,9 +16,8 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: HomeView,
-      meta: { hideHeader: true } 
+      meta: { hideHeader: true } // 主页仍然完全隐藏导航栏
     },
-    // 🎯 关键修改：/courses 路由指向 CourseListView
     {
       path: '/courses',
       name: 'courses',
@@ -30,16 +28,22 @@ const router = createRouter({
       name: 'about',
       component: () => import('@/views/AboutView.vue')
     },
+    
+    // --- 【【【核心修复】】】 ---
     {
       path: '/login',
       name: 'login',
       component: LoginView,
+      meta: { simpleHeader: true } // <-- 告诉 App.vue 显示“简化版”导航栏
     },
     {
       path: '/register',
       name: 'register',
-      component: RegisterView
+      component: RegisterView,
+      meta: { simpleHeader: true } // <-- 告诉 App.vue 显示“简化版”导航栏
     },
+    // --- 【【【修复结束】】】 ---
+    
     {
       path: '/courses/:id',
       name: 'course-detail',
@@ -47,9 +51,23 @@ const router = createRouter({
       props: true
     },
     {
+      path: '/courses/:courseId/lessons/:lessonId',
+      name: 'lesson-watch',
+      component: () => import('@/views/LessonWatchView.vue'),
+      props: true,
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/create-course',
       name: 'create-course',
       component: CreateCourseView,
+      meta: { requiresAuth: true, requiredRole: ['instructor', 'admin'] }
+    },
+    {
+      path: '/courses/:id/edit',
+      name: 'course-edit',
+      component: () => import('@/views/CourseEditView.vue'), 
+      props: true,
       meta: { requiresAuth: true, requiredRole: ['instructor', 'admin'] }
     },
     {
@@ -62,15 +80,45 @@ const router = createRouter({
       name: 'payment-cancel',
       component: PaymentCancelView
     },
+    {
+      path: '/profile',
+      name: 'profile',
+      component: () => import('@/views/ProfileView.vue'), 
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/instructor-dashboard',
+      name: 'instructor-dashboard',
+      component: () => import('@/views/InstructorDashboardView.vue'), 
+      meta: { requiresAuth: true, requiredRole: ['instructor', 'admin'] }
+    },
+    {
+      path: '/become-instructor',
+      name: 'become-instructor',
+      component: () => import('@/views/BecomeInstructorView.vue'), 
+      meta: { requiresAuth: true, requiredRole: ['student'] } 
+    },
+    {
+      path: '/admin/applications',
+      name: 'admin-applications',
+      component: () => import('@/views/AdminApplicationsView.vue'), 
+      meta: { requiresAuth: true, requiredRole: ['admin'] } 
+    },
   ]
 })
 
 
-// 全局路由守卫
+// 全局路由守卫 (不变)
 router.beforeEach(async (to, from, next) => {
     const authStore = useAuthStore()
     const requiresAuth = to.meta.requiresAuth
     const requiredRole = to.meta.requiredRole
+
+    // (获取用户信息, 确保 authStore.user 已加载)
+    // 修复: 检查 authStore.user 是否为 null
+    if (requiresAuth && authStore.token && !authStore.user) {
+        await authStore.fetchUser();
+    }
 
     if (requiresAuth && !authStore.isAuthenticated) {
         return next({ name: 'login' })
@@ -81,7 +129,6 @@ router.beforeEach(async (to, from, next) => {
         return next({ name: 'home' })
     }
 
-    // 关键：登录后访问登录/注册页，重定向到课程列表页
     if ((to.name === 'login' || to.name === 'register') && authStore.isAuthenticated) {
         return next({ name: 'courses' }) 
     }

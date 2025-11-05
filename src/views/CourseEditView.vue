@@ -1,38 +1,62 @@
 <script setup>
-import { ref, onMounted } from 'vue' // <-- 导入 onMounted
+import { ref, onMounted } from 'vue'
 import axios from 'axios'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useCourseStore } from '@/stores/courseStore' 
 
 const API_URL = import.meta.env.VITE_API_URL
 
 const router = useRouter()
+const route = useRoute() 
 const courseStore = useCourseStore() 
-    
+
+const courseId = route.params.id 
+
 const title = ref('')
 const description = ref('')
 const price = ref(0.00)
-const coverImageFile = ref(null) 
-// 【【【新增】】】: 存储分类 ID
 const categoryId = ref(null) 
+const coverImageFile = ref(null) 
     
 const errorMessage = ref('')
 const successMessage = ref('')
+const loading = ref(true)
 
-// 【【【新增】】】: 页面加载时获取分类
-onMounted(() => {
-  courseStore.fetchCategories()
+// 页面加载时, 获取课程详情和分类
+onMounted(async () => {
+  // 确保分类已加载
+  if (courseStore.categories.length === 0) {
+    await courseStore.fetchCategories()
+  }
+  
+  try {
+    // 从 store 获取课程详情
+    const course = await courseStore.fetchCourseDetail(courseId)
+    if (course) {
+      // 填充表单
+      title.value = course.title
+      description.value = course.description
+      price.value = course.price
+      categoryId.value = course.category?.id || null
+    } else {
+        errorMessage.value = "无法加载课程数据。"
+    }
+  } catch (error) {
+     errorMessage.value = "加载课程失败。"
+  } finally {
+     loading.value = false
+  }
 })
 
 const handleFileChange = (event) => {
   coverImageFile.value = event.target.files ? event.target.files[0] : null
 }
 
-const handleSubmit = async () => {
+// 提交更新
+const handleUpdate = async () => {
   errorMessage.value = ''
   successMessage.value = ''
 
-  // 【【【修改】】】: 检查分类
   if (!categoryId.value) {
       errorMessage.value = '请选择一个课程分类。'
       return
@@ -42,30 +66,34 @@ const handleSubmit = async () => {
   formData.append('title', title.value)
   formData.append('description', description.value)
   formData.append('price', price.value)
-  formData.append('category', categoryId.value) // <-- 【【【新增】】】
+  formData.append('category', categoryId.value)
   
   if (coverImageFile.value) {
     formData.append('cover_image', coverImageFile.value)
   }
 
   try {
-    console.log('正在提交课程数据 (FormData)...')
+    console.log('正在更新课程数据 (FormData)...')
     
-    const response = await axios.post(`${API_URL}/api/courses/`, formData)
+    // 使用 PATCH 请求 (只发送修改过的字段)
+    const response = await axios.patch(`${API_URL}/api/courses/${courseId}/`, formData)
     
-    courseStore.markAsStale() 
+    courseStore.markAsStale() // 标记列表为“陈旧”
 
-    successMessage.value = `课程"${response.data.title}" 创建成功!`
+    successMessage.value = `课程"${response.data.title}" 更新成功!`
     
-    router.push(`/courses/${response.data.id}`)
+    // 2秒后跳转回讲师面板
+    setTimeout(() => {
+        router.push({ name: 'instructor-dashboard' })
+    }, 2000)
     
   } catch (error) {
-    console.error('创建课程失败:', error)
+    console.error('更新课程失败:', error)
     if (error.response) {
       if (error.response.status === 403) {
-        errorMessage.value = '权限不足! 只有讲师和管理员才能创建课程。'
+        errorMessage.value = '权限不足! 只有本课程讲师和管理员才能编辑。'
       } else {
-        errorMessage.value = '创建失败: ' + JSON.stringify(error.response.data)
+        errorMessage.value = '更新失败: ' + JSON.stringify(error.response.data)
       }
     } else {
       errorMessage.value = '网络错误或服务器连接失败。'
@@ -75,13 +103,15 @@ const handleSubmit = async () => {
 </script>
 
 <template>
-  <div class="create-course-page">
-    <h1>创建新课程</h1>
+  <div class="edit-course-page">
+    <h1>编辑课程</h1>
+    
+    <div v-if="loading">正在加载课程数据...</div>
     
     <p v-if="successMessage" class="message success">{{ successMessage }}</p>
     <p v-if="errorMessage" class="message error">{{ errorMessage }}</p>
 
-    <form @submit.prevent="handleSubmit" class="course-form" enctype="multipart/form-data">
+    <form @submit.prevent="handleUpdate" class="course-form" v-if="!loading && !successMessage">
       
       <div class="form-group">
         <label for="title">课程标题:</label>
@@ -113,31 +143,32 @@ const handleSubmit = async () => {
       </div>
       
       <div class="form-group">
-        <label for="cover_image">课程封面图 (推荐 16:9):</label>
+        <label for="cover_image">更新课程封面图 (推荐 16:9):</label>
+        <p class="small-text">(如果不选择新文件, 将保留原封面图)</p>
         <input type="file" id="cover_image" @change="handleFileChange" accept="image/*">
       </div>
 
-      <button type="submit" class="submit-button">提交课程</button>
+      <button type="submit" class="submit-button">保存更改</button>
     </form>
   </div>
 </template>
 
 <style scoped>
-.create-course-page { max-width: 600px; margin: 0 auto; padding: 20px; }
+.edit-course-page { max-width: 600px; margin: 20px auto; padding: 20px; }
 .course-form { display: flex; flex-direction: column; gap: 15px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
 .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
-/* 【【【修改】】】: 为 <select> 添加样式 */
+.form-group .small-text { font-size: 0.9rem; color: #777; margin: -5px 0 5px 0; }
 .form-group input, .form-group textarea, .form-group select { 
     width: 100%; 
     padding: 10px; 
     box-sizing: border-box; 
     border: 1px solid #ccc; 
     border-radius: 4px; 
-    font-size: 1rem; /* 确保字体大小一致 */
-    font-family: inherit; /* 确保字体一致 */
+    font-size: 1rem;
+    font-family: inherit;
 }
-.submit-button { padding: 12px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; }
-.submit-button:hover { background-color: #1e7e34; }
+.submit-button { padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; }
+.submit-button:hover { background-color: #0056b3; }
 .message { padding: 10px; border-radius: 4px; margin-bottom: 15px; }
 .success { background-color: #d4edda; color: #155724; border-color: #c3e6cb; }
 .error { background-color: #f8d7da; color: #721c24; border-color: #f5c6cb; }

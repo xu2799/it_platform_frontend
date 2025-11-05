@@ -3,6 +3,9 @@ import { ref } from 'vue'
 import axios from 'axios'
 import { useRouter, RouterLink } from 'vue-router'
 
+// 【建议 4】: 从 .env 文件读取 API 基础 URL
+const API_URL = import.meta.env.VITE_API_URL
+
 const router = useRouter()
 const username = ref('')
 const password = ref('')
@@ -23,7 +26,8 @@ const handleRegister = async () => {
     }
 
     try {
-        const response = await axios.post('http://127.0.0.1:8000/api/register/', userData)
+        // 【建议 4】: 替换硬编码 URL
+        const response = await axios.post(`${API_URL}/api/register/`, userData)
         
         if (response.status === 201) {
             alert('注册成功！请使用你的新账号登录。')
@@ -90,15 +94,13 @@ const handleRegister = async () => {
 </template>
 
 <style scoped>
-/* 🎯 关键：为了保持同步，复制 LoginView.vue 的所有样式 */
+/* (Style 保持不变) */
 .auth-view-container {
     display: flex;
     justify-content: center;
-    /* 保持卡片“中上”对齐 */
     align-items: flex-start; 
     width: 100%;
     min-height: calc(100vh - 60px); 
-    /* 保持顶部 60px padding */
     padding: 60px 20px 40px 20px; 
     box-sizing: border-box;
     background-image: none; 
@@ -113,17 +115,13 @@ const handleRegister = async () => {
     overflow: hidden; 
     position: relative;
 }
-
-/* --- 左侧: 推广面板 (统一尺寸) --- */
 .auth-promo-panel {
     width: 45%;
     padding: 40px;
     color: white;
     display: flex;
     flex-direction: column;
-    /* 🎯 关键修复 1：恢复垂直居中 */
     justify-content: center; 
-    /* 🎯 关键修复 1：移除顶部 padding */
     padding-top: 40px; 
     text-align: center;
     position: relative;
@@ -139,20 +137,15 @@ const handleRegister = async () => {
 .large-brand { 
     font-size: 2.2rem; 
     font-weight: 900; 
-    /* 🎯 关键修复 2：增加底部外边距，增加间距 */
     margin-bottom: 50px; 
     line-height: 1.3;
 }
-
-/* --- 右侧: 表单区域 (统一尺寸) --- */
 .auth-form-area {
     width: 55%;
     padding: 20px;
     display: flex;
     flex-direction: column;
-    /* 🎯 关键修复 3：恢复垂直居中 */
     justify-content: center; 
-    /* 🎯 关键修复 3：移除顶部 padding */
     padding-top: 20px;
     align-items: center;
     min-height: 500px; 
@@ -178,8 +171,6 @@ const handleRegister = async () => {
 .error-message { color: #dc3545; font-size: 0.9rem; text-align: center; margin-top: 10px; }
 .auth-footer-links { margin-top: 20px; font-size: 0.9rem; }
 .auth-footer-links a { color: #007bff; text-decoration: none; font-weight: bold; }
-
-/* 移动端适配 */
 @media (max-width: 768px) {
     .auth-card { flex-direction: column; max-width: 100%; height: auto; min-height: calc(100vh - 60px); border-radius: 0; }
     .auth-promo-panel, .auth-form-area { width: 100%; padding: 30px 20px; min-height: auto; }
