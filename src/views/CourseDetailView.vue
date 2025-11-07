@@ -1,13 +1,11 @@
 <script setup>
 // --- 1. 导入 ---
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue' // <-- 【【【新增 watch】】】
 import { useCourseStore } from '@/stores/courseStore'
 import { useAuthStore } from '@/stores/authStore'
 import axios from 'axios'
-// 【建议 3】: 导入 RouterLink
 import { useRouter, RouterLink } from 'vue-router'
 
-// 【建议 4】: 获取 API 基础 URL
 const API_URL = import.meta.env.VITE_API_URL
 
 // --- 2. 激活仓库和路由 ---
@@ -29,12 +27,12 @@ const newLessonTitle = ref('')
 const videoFile = ref(null) 
 const targetModuleId = ref(null) 
 const uploadStatus = ref('') 
+// const isEnrolling = ref(false) // <-- 【【【已移除】】】
 
 // --- 5. 计算属性 (Computed) ---
 
 // 查找当前课程
 const course = computed(() => {
-  // 从仓库中查找已加载的课程
   return courseStore.courses.find(c => c.id == props.id)
 })
 
@@ -48,80 +46,56 @@ const isInstructorOfCourse = computed(() => {
   return false
 })
 
-// 【【【建议 1 修复】】】: 检查是否已购买 (不再硬编码)
-const isEnrolled = computed(() => {
-  // 讲师/管理员 视为“已购买”
-  if (isInstructorOfCourse.value) {
-    return true; 
-  }
-  
-  // 检查 authStore.user.enrollments 数组 (在 authStore 启动时或支付成功时获取)
-  if (!authStore.user?.enrollments) {
-    return false;
-  }
-  
-  // props.id 是字符串, authStore.user.enrollments 存的是数字 ID
-  const courseIdAsNumber = parseInt(props.id);
-  return authStore.user.enrollments.includes(courseIdAsNumber);
-})
+// 【【【已移除】】】: isEnrolled 不再需要
+// const isEnrolled = computed(() => { ... })
 
 // --- 6. 生命周期函数 ---
 onMounted(() => {
-  // 【【【修复】】】:
-  // 不再调用 fetchCourses() (它只获取列表)
-  // 而是调用新的 fetchCourseDetail() 来获取“完整”数据
-  // (后端会检查用户是否已购买, 并决定是否返回 modules)
   courseStore.fetchCourseDetail(props.id)
 })
 
-// --- 7. 核心功能函数 ---
-
-// (A) 处理支付 (建议 4: 替换 URL)
-const handleCheckout = async () => {
-  if (!authStore.isAuthenticated) {
-    router.push('/login') 
-    return
-  }
-  if (course.value.price <= 0) {
-    alert('此课程为免费课程，无需支付！')
-    return
-  }
-  
-  const checkoutData = { course_id: props.id }
-  try {
-    // 【建议 4】: 替换硬编码 URL
-    const response = await axios.post(`${API_URL}/api/checkout/`, checkoutData)
-    window.location.href = response.data.url 
-  } catch (error) {
-    console.error('发起支付失败:', error)
-    if (error.response?.data?.detail) {
-      alert(`发起支付失败: ${error.response.data.detail}`)
-    } else {
-      alert('发起支付失败，请检查 Stripe 密钥或网络连接。')
+// --- 7. 【【【新增：自动跳转逻辑】】】 ---
+watch(course, (newCourse) => {
+  // 确保 newCourse 不是 null 并且有数据
+  if (newCourse && newCourse.modules && newCourse.modules.length > 0) {
+    const firstModule = newCourse.modules[0];
+    if (firstModule.lessons && firstModule.lessons.length > 0) {
+      const firstLesson = firstModule.lessons[0];
+      
+      console.log(`课程加载完毕, 自动跳转到第一节课: ${firstLesson.id}`)
+      
+      // 使用 replace, 这样用户按“返回”时不会回到这个空白的详情页
+      router.replace({ 
+        name: 'lesson-watch', 
+        params: { courseId: newCourse.id, lessonId: firstLesson.id } 
+      });
     }
   }
-}
+}, { 
+  immediate: true // 立即检查 (如果数据已在 Pinia 仓库中)
+})
+
+
+// --- 8. 核心功能函数 (已移除 handleEnroll) ---
 
 // (B) 处理文件选择 (不变)
 const handleFileChange = (event) => {
   videoFile.value = event.target.files ? event.target.files[0] : null
 }
 
-// (C) 添加新章节 (建议 4: 替换 URL)
+// (C) 添加新章节 (不变)
 const handleAddModule = async () => {
   if (!newModuleTitle.value.trim()) return 
   
   try {
     const moduleData = { course: props.id, title: newModuleTitle.value }
-    // 【建议 4】: 替换硬编码 URL
     const response = await axios.post(`${API_URL}/api/modules/`, moduleData)
     
-    // (逻辑不变)
     if (course.value.modules) {
       course.value.modules.push(response.data)
       targetModuleId.value = response.data.id
     }
-    courseStore.markAsStale() // 标记列表页“陈旧”
+    courseStore.markAsStale() 
     newModuleTitle.value = ''
     
   } catch (error) {
@@ -130,7 +104,7 @@ const handleAddModule = async () => {
   }
 }
 
-// (D) 添加新课时 (建议 4: 替换 URL)
+// (D) 添加新课时 (不变)
 const handleAddLesson = async () => {
   if (!newLessonTitle.value.trim() || !targetModuleId.value || !videoFile.value) {
     alert('请填写课时标题，选择章节并上传文件。')
@@ -144,20 +118,18 @@ const handleAddLesson = async () => {
   formData.append('video_file', videoFile.value) 
 
   try {
-    // 【建议 4】: 替换硬编码 URL
     const response = await axios.post(`${API_URL}/api/lessons/`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data' 
       }
     })
     
-    // (逻辑不变)
     const targetModule = course.value.modules.find(m => m.id == targetModuleId.value)
     if (targetModule) {
         targetModule.lessons = targetModule.lessons || []
         targetModule.lessons.push(response.data)
     }
-    courseStore.markAsStale() // 标记列表页“陈旧”
+    courseStore.markAsStale() 
     uploadStatus.value = '上传成功！视频正在后台处理中...'
     newLessonTitle.value = ''
     videoFile.value = null
@@ -226,26 +198,13 @@ const handleAddLesson = async () => {
       
       <h1>{{ course.title }}</h1>
       <p>{{ course.description }}</p>
-      <p>价格: ¥{{ course.price }}</p>
       <p v-if="course.instructor">讲师: {{ course.instructor.username }}</p>
-
-      <div class="checkout-area">
-        <button v-if="!authStore.isAuthenticated" @click="router.push('/login')" class="checkout-button">
-          请登录以购买 (¥{{ course.price }})
-        </button>
-        <button v-else-if="!isEnrolled" @click="handleCheckout" class="checkout-button primary">
-          立即购买 (¥{{ course.price }})
-        </button>
-        <button v-else class="checkout-button enrolled" disabled>
-          已购买 - 开始学习
-        </button>
-      </div>
 
       <hr>
 
       <h2>课程内容:</h2>
       
-      <div v-if="(isEnrolled || isInstructorOfCourse) && course.modules">
+      <div v-if="course.modules">
         <div v-for="module in course.modules" :key="module.id" class="module">
           <h3>{{ module.title }}</h3>
           <ul>
@@ -269,18 +228,13 @@ const handleAddLesson = async () => {
           </ul>
         </div>
       </div>
-
-      <div v-else class="locked-content">
-        <h3>🔒 课程内容已锁定</h3>
-        <p>请先购买课程以查看所有章节和课时。</p>
-      </div>
       
     </div>
   </div>
 </template>
 
 <style scoped>
-/* (你原有的样式保持不变) */
+/* (样式基本不变) */
 .course-detail { max-width: 800px; margin: 0 auto; padding-top: 20px; }
 .admin-panel { border: 2px dashed #007bff; padding: 15px; margin-bottom: 20px; border-radius: 8px; background-color: #eaf4ff; }
 .admin-panel h2 { margin-top: 0; color: #007bff; font-size: 1.2rem; }
@@ -295,13 +249,9 @@ const handleAddLesson = async () => {
 .status-msg { margin-top: 10px; font-weight: bold; }
 .module { margin-left: 20px; margin-top: 15px; padding: 10px; border-left: 3px solid #ccc; }
 h3 { font-size: 1.1rem; }
-.checkout-area { margin-top: 20px; }
-.checkout-button { padding: 15px 30px; font-size: 1.2rem; border: none; border-radius: 8px; cursor: pointer; transition: background-color 0.3s; background-color: #f0ad4e; color: white; }
-.checkout-button.primary { background-color: #007bff; }
-.checkout-button.enrolled { background-color: #5cb85c; cursor: not-allowed; }
-.checkout-button.primary:hover { background-color: #0056b3; }
 
-/* 【【【建议 3 修复】】】: 新增样式 */
+/* 【【【已移除】】】 .checkout-area, .locked-content */
+
 .lesson-link {
   text-decoration: none;
   color: #333;
@@ -315,17 +265,5 @@ h3 { font-size: 1.1rem; }
 .lesson-link:hover li {
   background-color: #f0f0f0;
   color: #007bff;
-}
-
-.locked-content {
-  border: 1px dashed #ccc;
-  background-color: #f9f9f9;
-  padding: 20px;
-  text-align: center;
-  border-radius: 8px;
-  margin-top: 20px;
-}
-.locked-content h3 {
-  color: #555;
 }
 </style>

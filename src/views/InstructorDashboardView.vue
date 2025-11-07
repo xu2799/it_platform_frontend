@@ -65,7 +65,6 @@ const getFullCoverImagePath = (relativePath) => {
             <span v-if="course.category" class="category-tag">
                 {{ course.category.name }}
             </span>
-            <span class="price-tag">¥{{ course.price }}</span>
           </div>
           <div class="card-content">
             <h3>{{ course.title }}</h3>
@@ -102,10 +101,11 @@ const getFullCoverImagePath = (relativePath) => {
 </template>
 
 <style scoped>
+/* 【【【核心修改】】】: 移除 max-width 和 margin, 调整 padding */
 .dashboard-container {
-    padding: 20px;
-    max-width: 1200px;
-    margin: 0 auto;
+    padding: 20px 40px; /* 顶部/底部 20px, 左/右 40px */
+    /* max-width: 1200px; */ /* <-- 已移除 */
+    /* margin: 0 auto; */    /* <-- 已移除 */
 }
 .section-title {
     font-size: 2.2rem;
@@ -148,16 +148,6 @@ const getFullCoverImagePath = (relativePath) => {
     width: 100%;
     height: 100%;
     object-fit: cover; 
-}
-.price-tag {
-    background-color: rgba(0, 0, 0, 0.7);
-    color: white;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.9rem;
-    position: absolute;
-    bottom: 8px;
-    right: 8px;
 }
 .category-tag {
     background-color: #3498db;

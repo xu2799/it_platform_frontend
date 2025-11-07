@@ -11,7 +11,7 @@ const courseStore = useCourseStore()
     
 const title = ref('')
 const description = ref('')
-const price = ref(0.00)
+// const price = ref(0.00) // <-- 【【【已移除】】】
 const coverImageFile = ref(null) 
 // 【【【新增】】】: 存储分类 ID
 const categoryId = ref(null) 
@@ -41,7 +41,7 @@ const handleSubmit = async () => {
   const formData = new FormData()
   formData.append('title', title.value)
   formData.append('description', description.value)
-  formData.append('price', price.value)
+  // formData.append('price', price.value) // <-- 【【【已移除】】】
   formData.append('category', categoryId.value) // <-- 【【【新增】】】
   
   if (coverImageFile.value) {
@@ -107,11 +107,6 @@ const handleSubmit = async () => {
         <textarea id="description" v-model="description" required rows="5"></textarea>
       </div>
 
-      <div class="form-group">
-        <label for="price">价格 (¥):</label>
-        <input type="number" id="price" v-model="price" required min="0.00" step="0.01">
-      </div>
-      
       <div class="form-group">
         <label for="cover_image">课程封面图 (推荐 16:9):</label>
         <input type="file" id="cover_image" @change="handleFileChange" accept="image/*">

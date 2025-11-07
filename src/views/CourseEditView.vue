@@ -14,7 +14,7 @@ const courseId = route.params.id
 
 const title = ref('')
 const description = ref('')
-const price = ref(0.00)
+// const price = ref(0.00) // <-- 【【【已移除】】】
 const categoryId = ref(null) 
 const coverImageFile = ref(null) 
     
@@ -36,7 +36,7 @@ onMounted(async () => {
       // 填充表单
       title.value = course.title
       description.value = course.description
-      price.value = course.price
+      // price.value = course.price // <-- 【【【已移除】】】
       categoryId.value = course.category?.id || null
     } else {
         errorMessage.value = "无法加载课程数据。"
@@ -65,7 +65,7 @@ const handleUpdate = async () => {
   const formData = new FormData()
   formData.append('title', title.value)
   formData.append('description', description.value)
-  formData.append('price', price.value)
+  // formData.append('price', price.value) // <-- 【【【已移除】】】
   formData.append('category', categoryId.value)
   
   if (coverImageFile.value) {
@@ -137,11 +137,6 @@ const handleUpdate = async () => {
         <textarea id="description" v-model="description" required rows="5"></textarea>
       </div>
 
-      <div class="form-group">
-        <label for="price">价格 (¥):</label>
-        <input type="number" id="price" v-model="price" required min="0.00" step="0.01">
-      </div>
-      
       <div class="form-group">
         <label for="cover_image">更新课程封面图 (推荐 16:9):</label>
         <p class="small-text">(如果不选择新文件, 将保留原封面图)</p>

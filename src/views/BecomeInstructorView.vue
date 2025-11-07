@@ -16,10 +16,13 @@ const handleSubmitApplication = async () => {
     errorMessage.value = ''
     successMessage.value = ''
     
+    // 【【【已移除】】】: 移除 50 字符检查
+    /*
     if (justification.value.trim().length < 50) {
         errorMessage.value = '申请理由不能少于 50 个字符。'
         return
     }
+    */
 
     try {
         const response = await axios.post(`${API_URL}/api/applications/`, {
@@ -61,7 +64,7 @@ const handleSubmitApplication = async () => {
       <div class="form-group">
         <label for="justification">申请理由:</label>
         <p class="small-text">
-            请详细描述你的专业背景、教学经验以及你希望创建的课程类型。(不少于50字)
+            请详细描述你的专业背景、教学经验以及你希望创建的课程类型。
         </p>
         <textarea 
             id="justification" 

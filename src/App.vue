@@ -1,7 +1,7 @@
 <script setup>
 import { RouterLink, RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore' 
-import { useCourseStore } from '@/stores/courseStore' 
+import { useCourseStore } from '@/stores/courseStore' // <-- 这就是出错的第 4 行
 import { computed, ref, onMounted } from 'vue' 
 
 const authStore = useAuthStore()
@@ -11,10 +11,9 @@ const route = useRoute()
 
 const searchQuery = ref('')
 
-// 【【【布局修复】】】: 检查路由元信息
-const shouldShowHeader = computed(() => !route.meta.hideHeader) // 主页 (/) 不显示
-const shouldShowSimpleHeader = computed(() => !!route.meta.simpleHeader) // 登录/注册页
-const shouldShowFullHeader = computed(() => shouldShowHeader.value && !shouldShowSimpleHeader.value) // 其他所有页面
+const shouldShowHeader = computed(() => !route.meta.hideHeader) 
+const shouldShowSimpleHeader = computed(() => !!route.meta.simpleHeader) 
+const shouldShowFullHeader = computed(() => shouldShowHeader.value && !shouldShowSimpleHeader.value) 
 
 onMounted(() => {
   courseStore.fetchCategories()
@@ -69,10 +68,6 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
 
       <nav class="navbar-main">
         <ul>
-          <li>
-            <RouterLink to="/courses" exact>所有课程</RouterLink>
-          </li>
-
           <li class="category-menu">
             <a class="category-menu-trigger">
               课程分类
@@ -137,6 +132,11 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
                 <RouterLink :to="{ name: 'profile' }" class="dropdown-item">
                   个人资料
                 </RouterLink>
+                
+                <RouterLink :to="{ name: 'favorites' }" class="dropdown-item">
+                  我的收藏
+                </RouterLink>
+
                 <RouterLink 
                   v-if="authStore.user?.role === 'instructor' || authStore.user?.role === 'admin'"
                   :to="{ name: 'instructor-dashboard' }" 
@@ -180,7 +180,7 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
 <style>
 /* ... (全局样式 base.css/main.css 位于 assets 目录，此处省略) */
 
-/* 顶部导航栏 */
+/* 顶部导航栏 (不变) */
 .app-header {
   background-color: #3498db; 
   padding: 0 30px;
@@ -191,15 +191,10 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   gap: 20px;
 }
-
-/* 区域 1: 品牌 (左) */
 .navbar-left {
   display: flex;
   align-items: center;
   flex-shrink: 0; 
-}
-.navbar-brand {
-  flex-shrink: 0;
 }
 .navbar-brand a { 
   color: white;
@@ -211,8 +206,6 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
 .navbar-brand a:hover {
     opacity: 0.8;
 }
-
-/* 区域 2: 主导航 (中) */
 .navbar-main {
   flex-grow: 1; 
   margin: 0 20px; 
@@ -225,12 +218,10 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
   padding: 0;
   display: flex;
   gap: 25px;
+  align-items: center; 
 }
-/* 【【【样式修复 2】】】: 统一下发对齐 padding */
 .navbar-main > ul > li {
-  padding-bottom: 10px;
-  margin-top: -10px; 
-  padding-top: 10px;
+  /* (已在上一轮修复中移除) */
 }
 .navbar-main > ul > li > a {
   color: #ecf0f1; 
@@ -243,13 +234,10 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
   white-space: nowrap; 
 }
 .navbar-main > ul > li > a:hover,
-/* 【【【修复】】】: 确保只有 "exact" 匹配才高亮 */
 .navbar-main > ul > li > a.router-link-exact-active { 
   color: white;
   border-bottom-color: #f0ad4e;
 }
-
-/* 课程分类下拉菜单 */
 .category-menu {
   position: relative; 
   cursor: pointer;
@@ -292,20 +280,15 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
 .category-menu:hover .category-dropdown-content {
   display: block;
 }
-
-
-/* 区域 3: 右侧 (搜索 + 用户) */
 .navbar-right {
   display: flex;
   align-items: center;
   flex-shrink: 0; 
   gap: 20px; 
 }
-
-/* 搜索框 (新位置) */
 .search-form {
   display: flex;
-  width: 300px; /* 【【【样式修复 1】】】: 固定宽度, 解决过大问题 */
+  width: 300px; 
 }
 .search-input {
   padding: 8px 12px;
@@ -328,8 +311,6 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
 .search-button:hover {
   background-color: #c0802b;
 }
-
-/* 用户操作 */
 .navbar-user {
   display: flex;
   align-items: center;
@@ -345,7 +326,6 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
 .navbar-user li {
   margin-left: 20px;
 }
-/* 这个 .navbar-user a 样式是导致“白字”问题的根源 */
 .navbar-user a {
   color: white;
   text-decoration: none;
@@ -373,8 +353,6 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
 .nav-button.create-course-btn:hover {
   background-color: #27ae60;
 }
-
-/* 用户下拉菜单 */
 .user-menu-container {
   gap: 20px;
 }
@@ -382,9 +360,6 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
   position: relative; 
   cursor: pointer;
   margin-left: 0; 
-  padding-bottom: 10px;
-  margin-top: -10px;
-  padding-top: 10px;
 }
 .navbar-user ul {
   gap: 20px;
@@ -428,32 +403,24 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
 .user-menu:hover .dropdown-content {
   display: block;
 }
-
-/* 【【【样式修复 3】】】: 修复下拉菜单文字颜色 (Bug 修复) */
-/* 我们使用 .dropdown-content .dropdown-item 来提高优先级 (Specificity),
-  确保它能覆盖 .navbar-user a 的 { color: white } 
-*/
 .dropdown-content .dropdown-item {
   display: block;
   padding: 12px 16px;
   text-decoration: none;
-  /* 修复 Bug: 确保文字颜色是深色, 覆盖继承的白色 */
   color: #333 !important; 
   font-size: 1rem;
   background-color: white; 
 }
-/* 修复悬停颜色 */
 .dropdown-content .dropdown-item:hover {
   background-color: #f1f1f1 !important; 
   color: #007bff !important;
 }
-/* 修复退出登录按钮的颜色 */
 .dropdown-content .dropdown-item.logout-item {
   color: #e74c3c !important; 
   border-top: 1px solid #eee;
 }
 .dropdown-content .dropdown-item.logout-item:hover {
-  color: #a94442 !important; /* 退出按钮的悬停颜色 */
+  color: #a94442 !important;
 }
 
 
@@ -462,8 +429,8 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
   padding: 0; 
   flex-grow: 1; 
   width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
+  /* max-width: 1200px; */  /* <-- 已移除 */
+  /* margin: 0 auto; */     /* <-- 已移除 */
   box-sizing: border-box;
   background-color: #ffffff; 
 }

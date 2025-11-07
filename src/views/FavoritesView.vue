@@ -1,31 +1,37 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue' 
-import { RouterLink, useRoute } from 'vue-router'
-import { useCourseStore } from '@/stores/courseStore'
+import { ref, onMounted } from 'vue' 
+import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore' 
+import axios from 'axios'
 
-const courseStore = useCourseStore()
+const API_URL = import.meta.env.VITE_API_URL
 const authStore = useAuthStore() 
-const route = useRoute() 
 
-const hoveredCourseId = ref(null) 
+const courses = ref([])
+const loading = ref(true)
+const errorMessage = ref('')
+
+// 获取收藏的课程
+const fetchFavoriteCourses = async () => {
+    loading.value = true
+    errorMessage.value = ''
+    try {
+        // 调用新的 API 端点
+        const response = await axios.get(`${API_URL}/api/favorites/`)
+        courses.value = response.data
+    } catch (error) {
+        console.error('获取收藏课程失败:', error)
+        errorMessage.value = '无法加载你收藏的课程。'
+    } finally {
+        loading.value = false
+    }
+}
 
 onMounted(() => {
-  if (authStore.token && !authStore.user) {
-      authStore.fetchUser()
-  }
+    fetchFavoriteCourses()
 })
 
-watch(() => route.query, (newQuery) => {
-  console.log('路由查询已更改, 正在获取新课程:', newQuery);
-  courseStore.fetchCourses(newQuery);
-}, {
-  immediate: true,
-  deep: true 
-})
-
-
-// --- (辅助函数) ---
+// (辅助函数)
 const getFullCoverImagePath = (relativePath) => {
     if (relativePath) {
         return relativePath;
@@ -33,32 +39,28 @@ const getFullCoverImagePath = (relativePath) => {
     return 'https://via.placeholder.com/300x150.png?text=No+Cover'
 }
 
-const isCourseOwner = (course) => {
-    if (!authStore.isAuthenticated || !authStore.user) return false
-    if (authStore.user.role === 'admin') return true
-    if (authStore.user.role === 'instructor') {
-        return course.instructor?.id === authStore.user.id
-    }
-    return false
+// 检查课程是否仍被收藏 (用于在取消收藏时即时移除)
+const isStillFavorited = (courseId) => {
+    return authStore.isCourseFavorited(courseId)
 }
+
 </script>
 
 <template>
-  <div class="course-list-container">
+  <div class="favorites-container">
     
-    <div v-if="route.query.search" class="search-result-header">
-        正在搜索: "<strong>{{ route.query.search }}</strong>"
-        <RouterLink :to="{ name: 'courses', query: { ...route.query, search: undefined } }" class="clear-search">
-            (清除搜索)
-        </RouterLink>
-    </div>
+    <h1 class="section-title">我的收藏</h1>
+    
+    <div v-if="loading">正在加载...</div>
+    <div v-if="errorMessage" class="message error">{{ errorMessage }}</div>
 
-    <section class="course-grid">
+    <section class="course-grid" v-if="courses.length > 0">
       
       <div 
-        v-for="course in courseStore.courses" 
+        v-for="course in courses" 
         :key="course.id" 
         class="course-card"
+        v-if="isStillFavorited(course.id)" 
       >
         <RouterLink :to="`/courses/${course.id}`" class="course-link-wrapper">
           <div class="course-thumbnail">
@@ -84,47 +86,33 @@ const isCourseOwner = (course) => {
             </div>
           </div>
         </RouterLink>
-
-        <div v-if="isCourseOwner(course)" class="card-admin-actions">
-            <RouterLink 
-                :to="{ name: 'course-edit', params: { id: course.id } }"
-                class="edit-button"
-            >
-                编辑课程
-            </RouterLink>
-        </div>
-
       </div>
       
     </section>
     
-    <div v-if="!courseStore.courses || courseStore.courses.length === 0" class="no-results">
-        <p>没有找到符合条件的课程。</p>
+    <div v-if="!loading && courses.length === 0" class="no-results">
+        <p>你还没有收藏任何课程。</p>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* 【【【核心修改】】】: 移除 max-width 和 margin, 调整 padding */
-.course-list-container {
-    padding: 20px 40px; /* 顶部/底部 20px, 左/右 40px */
-    /* max-width: 1200px; */ /* <-- 已移除 */
-    /* margin: 0 auto; */    /* <-- 已移除 */
+/* 我们从 CourseListView.vue 复制粘贴样式
+  (注意: .favorites-container 替换了 .course-list-container)
+*/
+.favorites-container {
+    padding: 20px 40px; 
+    /* max-width: 1200px; */ /* (已移除) */
+    /* margin: 0 auto; */
 }
-
-.search-result-header {
+.section-title {
+    font-size: 2.2rem;
+    color: #333;
+    margin-bottom: 30px;
     text-align: center;
-    margin: 10px 0 30px 0;
-    font-size: 1.1rem;
-    color: #555;
-}
-.clear-search {
-    margin-left: 10px;
-    font-size: 0.9rem;
-    color: #007bff;
 }
 
-/* --- (其余样式均不变) --- */
+/* --- 卡片网格 --- */
 .course-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -194,13 +182,11 @@ const isCourseOwner = (course) => {
     line-height: 1.5em;
     max-height: 3em; 
 }
-
-/* 【【【新增/修改】】】: 底部信息栏 */
 .card-footer-stats {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: auto; /* 关键: 推到底部 */
+    margin-top: auto; 
 }
 .instructor-name {
     font-size: 0.85rem;
@@ -212,31 +198,12 @@ const isCourseOwner = (course) => {
     color: #555;
     font-weight: bold;
 }
-
-/* (不变) */
-.card-admin-actions {
-    padding: 0 15px 15px 15px; 
-    margin-top: auto; 
-}
-.edit-button {
-    display: block;
-    width: 100%;
-    padding: 10px;
-    background-color: #007bff;
-    color: white;
-    text-align: center;
-    text-decoration: none;
-    border-radius: 5px;
-    font-weight: bold;
-    transition: background-color 0.2s;
-}
-.edit-button:hover {
-    background-color: #0056b3;
-}
 .no-results {
     text-align: center;
     padding: 50px;
     font-size: 1.2rem;
     color: #777;
 }
+.message { padding: 15px; border-radius: 4px; font-size: 1.1rem; text-align: center; }
+.error { background-color: #f8d7da; color: #721c24; border-color: #f5c6cb; }
 </style>

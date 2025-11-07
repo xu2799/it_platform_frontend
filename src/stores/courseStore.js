@@ -1,6 +1,8 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import axios from 'axios'
+// 【【【修复】】】: 导入 authStore，因为 fetchCourseDetail 需要它
+import { useAuthStore } from '@/stores/authStore'
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -9,14 +11,7 @@ export const useCourseStore = defineStore('courses', () => {
   const courses = ref([])
   const categories = ref([])
   
-  // 【【【Bug 修复】】】:
-  // 我们移除了 isStale 状态，因为它导致了缓存逻辑错误。
-  // CourseListView.vue 中的 'watch' 会在需要时自动调用 fetchCourses，
-  // 我们不需要在这里进行额外的缓存检查。
-  // const isStale = ref(true) 
-
   async function fetchCourses(params = {}) {
-    // 【【【Bug 修复】】】: 移除了 if (!hasQueries && !isStale.value) 的检查
     try {
       console.log('Pinia: 正在从 Django 获取课程, 查询参数:', params)
       const response = await axios.get(`${API_URL}/api/courses/`, { params })
@@ -24,15 +19,26 @@ export const useCourseStore = defineStore('courses', () => {
       console.log('Pinia: 成功获取数据并存入“仓库”。')
     } catch (error) {
       console.error('Pinia: 获取课程失败:', error)
-      courses.value = [] // 失败时清空, 避免显示旧数据
+      courses.value = [] 
     }
   }
 
-  // (fetchCourseDetail 不变)
   async function fetchCourseDetail(courseId) {
     try {
       console.log(`Pinia: 正在为课程 ${courseId} 获取“完整”详情...`)
-      const response = await axios.get(`${API_URL}/api/courses/${courseId}/`)
+      
+      // 【【【修复】】】: 初始化 authStore
+      const authStore = useAuthStore()
+      
+      let config = {}
+      if (authStore.token) {
+        config.headers = {
+            'Authorization': `Token ${authStore.token}`
+        }
+      }
+
+      // 【【【修复】】】: 传递 config (包含 token)
+      const response = await axios.get(`${API_URL}/api/courses/${courseId}/`, config)
       
       const detailedCourse = response.data
       const index = courses.value.findIndex(c => c.id == detailedCourse.id)
@@ -51,7 +57,6 @@ export const useCourseStore = defineStore('courses', () => {
     }
   }
 
-  // (fetchCategories 不变)
   async function fetchCategories() {
     if (categories.value.length > 0) {
       return
@@ -67,12 +72,26 @@ export const useCourseStore = defineStore('courses', () => {
 
 
   function markAsStale() {
-    // 这个函数现在只是一个占位符，因为我们移除了 fetchCourses 的缓存。
-    // 如果其他地方需要, 仍然可以保留它。
     console.log('Pinia: 课程数据已被标记为“陈旧”。')
-    // isStale.value = true
   }
 
-  // 移除了 isStale 的暴露
-  return { courses, categories, fetchCourses, fetchCourseDetail, fetchCategories, markAsStale }
+  // 【【【新增】】】: 用于同步点赞状态
+  function updateCourseLikeStatus(courseId, isLiked, likeCount) {
+    const course = courses.value.find(c => c.id == courseId);
+    if (course) {
+      console.log(`Pinia: 正在更新课程 ${courseId} 的点赞状态`);
+      course.is_liked = isLiked;
+      course.like_count = likeCount;
+    }
+  }
+
+  return { 
+    courses, 
+    categories, 
+    fetchCourses, 
+    fetchCourseDetail, 
+    fetchCategories, 
+    markAsStale,
+    updateCourseLikeStatus // <-- (来自 "My Favorites" 更新)
+  }
 })
