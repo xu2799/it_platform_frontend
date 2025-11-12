@@ -11,15 +11,29 @@ export const useCourseStore = defineStore('courses', () => {
   const courses = ref([])
   const categories = ref([])
   
+  const isLoading = ref(false)
+  const error = ref(null)
+
   async function fetchCourses(params = {}) {
+    isLoading.value = true
+    error.value = null
     try {
       console.log('Pinia: 正在从 Django 获取课程, 查询参数:', params)
       const response = await axios.get(`${API_URL}/api/courses/`, { params })
-      courses.value = response.data
-      console.log('Pinia: 成功获取数据并存入“仓库”。')
+      // 处理分页响应（如果启用分页）
+      if (response.data.results) {
+        courses.value = response.data.results
+      } else {
+        courses.value = response.data
+      }
+      console.log('Pinia: 成功获取数据并存入"仓库"。')
     } catch (error) {
       console.error('Pinia: 获取课程失败:', error)
-      courses.value = [] 
+      error.value = error.response?.data?.detail || '获取课程失败，请稍后重试'
+      courses.value = []
+      throw error
+    } finally {
+      isLoading.value = false
     }
   }
 
@@ -87,11 +101,13 @@ export const useCourseStore = defineStore('courses', () => {
 
   return { 
     courses, 
-    categories, 
+    categories,
+    isLoading,
+    error,
     fetchCourses, 
     fetchCourseDetail, 
     fetchCategories, 
     markAsStale,
-    updateCourseLikeStatus // <-- (来自 "My Favorites" 更新)
+    updateCourseLikeStatus
   }
 })

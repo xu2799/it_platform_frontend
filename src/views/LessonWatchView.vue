@@ -4,8 +4,30 @@ import { useRouter, RouterLink } from 'vue-router'
 import { useCourseStore } from '@/stores/courseStore'
 import { useAuthStore } from '@/stores/authStore' 
 import axios from 'axios'
+import BackButton from '@/components/BackButton.vue'
 
-const API_URL = import.meta.env.VITE_API_URL
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+
+const resolveMediaUrl = (url) => {
+  if (!url) {
+    console.log('⚠️ [URL解析] url 为空')
+    return null
+  }
+  
+  let resolvedUrl = null
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    resolvedUrl = url
+    console.log('✅ [URL解析] 完整URL:', resolvedUrl)
+  } else if (url.startsWith('/')) {
+    resolvedUrl = `${API_URL}${url}`
+    console.log('✅ [URL解析] 相对路径(/) -> 完整URL:', resolvedUrl)
+  } else {
+    resolvedUrl = `${API_URL}/${url}`
+    console.log('✅ [URL解析] 相对路径 -> 完整URL:', resolvedUrl)
+  }
+  
+  return resolvedUrl
+}
 
 // 激活
 const router = useRouter()
@@ -19,7 +41,9 @@ const props = defineProps({
 })
 
 // 状态
+const currentCourse = ref(null)
 const videoPlayer = ref(null)
+const videoError = ref(null)
 
 // 点赞和评论的状态
 const isLiked = ref(false)
@@ -27,20 +51,92 @@ const likeCount = ref(0)
 const comments = ref([])
 const newComment = ref('')
 
+// 动画状态
+const isLiking = ref(false)
+const isFavoriting = ref(false)
+const likeAnimation = ref(false)
+const favoriteAnimation = ref(false)
+const countAnimation = ref(false)
+
+// 标记是否已初始化（防止 watch 监听器覆盖手动更新）
+const isInitialized = ref(false)
+
 // 【【【新增】】】: 收藏状态 (来自 authStore)
 const isFavorited = computed(() => authStore.isCourseFavorited(props.courseId))
 
-// 页面加载时, 确保我们有这门课程的“完整”数据
-onMounted(() => {
-  courseStore.fetchCourseDetail(props.courseId)
+// 页面加载时, 确保我们有这门课程的"完整"数据
+onMounted(async () => {
+  console.log('🌐 [调试] API_URL:', API_URL)
+  console.log('🌐 [调试] 课程ID:', props.courseId)
+  console.log('🌐 [调试] 课时ID:', props.lessonId)
+  try {
+    const detail = await courseStore.fetchCourseDetail(props.courseId)
+    if (detail) {
+      currentCourse.value = detail
+    }
+  } catch (error) {
+    console.error('❌ [课程详情] 获取失败:', error)
+  }
+
   fetchComments(props.lessonId) 
 })
+
+// 监听 Pinia 仓库中的课程数据，保持 currentCourse 同步
+watch(
+  () => courseStore.courses.find(c => c.id == props.courseId),
+  (storeCourse) => {
+    if (storeCourse) {
+      // 如果已经初始化，保留当前的点赞状态
+      if (isInitialized.value && currentCourse.value) {
+        const savedLiked = isLiked.value
+        const savedCount = likeCount.value
+        currentCourse.value = storeCourse
+        // 恢复点赞状态（不依赖 store 中的数据）
+        currentCourse.value.is_liked = savedLiked
+        currentCourse.value.like_count = savedCount
+      } else {
+        // 未初始化时，直接更新
+        currentCourse.value = storeCourse
+      }
+    }
+  },
+  { immediate: true }
+)
+
+// 视频错误处理
+const handleVideoError = (event) => {
+  const video = event.target
+  videoError.value = `视频加载失败: ${video.error?.message || '未知错误'}`
+  console.error('❌ [视频错误]', {
+    error: video.error,
+    errorCode: video.error?.code,
+    errorMessage: video.error?.message,
+    networkState: video.networkState,
+    readyState: video.readyState,
+    src: video.src,
+    currentSrc: video.currentSrc
+  })
+}
+
+// 视频加载成功
+const handleVideoLoaded = () => {
+  videoError.value = null
+  console.log('✅ [视频加载] 视频加载成功')
+}
+
+// 视频可以播放
+const handleVideoCanPlay = () => {
+  console.log('✅ [视频就绪] 视频可以播放')
+}
 
 // --- 计算属性 ---
 
 // 1. 查找当前课程
 const course = computed(() => {
-  return courseStore.courses.find(c => c.id == props.courseId)
+  if (currentCourse.value) {
+    return currentCourse.value
+  }
+  return courseStore.courses.find(c => c.id == props.courseId) || null
 })
 
 // 2. 查找当前课时
@@ -58,13 +154,47 @@ const lesson = computed(() => {
 
 // 3. 获取视频 URL (不变)
 const videoUrl = computed(() => {
-  if (!lesson.value) return null
-  if (lesson.value.video_m3u8_url) {
-    return lesson.value.video_m3u8_url
+  if (!lesson.value) {
+    console.log('❌ [视频URL调试] lesson.value 为空')
+    return null
   }
+  
+  console.log('📹 [视频URL调试] 课时数据:', {
+    id: lesson.value.id,
+    title: lesson.value.title,
+    lesson_type: lesson.value.lesson_type,
+    video_m3u8_url: lesson.value.video_m3u8_url,
+    video_mp4_file: lesson.value.video_mp4_file,
+    content: lesson.value.content?.substring(0, 50) + '...'
+  })
+  
+  // 优先使用 video_mp4_file（真实文件）
+  // 只有当 video_m3u8_url 存在且不是假的（不包含 example.com）时才使用它
+  const m3u8Url = lesson.value.video_m3u8_url
+  const isFakeM3u8Url = m3u8Url && (
+    m3u8Url.includes('example.com') || 
+    m3u8Url.includes('localhost') && m3u8Url.includes('hls')
+  )
+  
   if (lesson.value.video_mp4_file) {
-    return lesson.value.video_mp4_file
+    const url = resolveMediaUrl(lesson.value.video_mp4_file)
+    console.log('✅ [视频URL调试] 使用 video_mp4_file (真实文件):', url)
+    return url
   }
+  
+  // 如果 video_mp4_file 不存在，且 video_m3u8_url 不是假的，才使用它
+  if (m3u8Url && !isFakeM3u8Url) {
+    const url = resolveMediaUrl(m3u8Url)
+    console.log('✅ [视频URL调试] 使用 video_m3u8_url (HLS):', url)
+    return url
+  }
+  
+  // 如果 video_m3u8_url 是假的，警告用户
+  if (isFakeM3u8Url) {
+    console.warn('⚠️ [视频URL调试] video_m3u8_url 是假URL，已忽略:', m3u8Url)
+  }
+  
+  console.log('❌ [视频URL调试] 没有找到有效的视频URL')
   return null
 })
 
@@ -77,14 +207,19 @@ watch(videoUrl, (newUrl) => {
   }
 })
 
-// 5. 监听课程加载, 更新点赞状态
+// 5. 监听课程加载, 仅在初始化时设置点赞状态（不覆盖手动更新）
 watch(course, (newCourse) => {
-  if (newCourse) {
-    isLiked.value = newCourse.is_liked
-    likeCount.value = newCourse.like_count
-    // (收藏状态 'isFavorited' 由 authStore 自动管理)
+  if (newCourse && !isInitialized.value) {
+    // 只在第一次加载时设置初始状态
+    isLiked.value = newCourse.is_liked ?? false
+    likeCount.value = newCourse.like_count ?? 0
+    isInitialized.value = true
+    console.log('✅ [初始化] 设置初始点赞状态:', {
+      isLiked: isLiked.value,
+      likeCount: likeCount.value
+    })
   }
-})
+}, { immediate: true })
 
 // 6. 监听课时 ID 变化, 重新加载评论
 watch(() => props.lessonId, (newLessonId) => {
@@ -120,7 +255,8 @@ const goToNextLesson = () => {
     }
 }
 const goToCourseHome = () => {
-    router.push({ name: 'courses' });
+    // 返回到课程详情页
+    router.push({ name: 'course-detail', params: { id: props.courseId } });
 }
 
 
@@ -159,32 +295,101 @@ const handlePostComment = async () => {
   }
 }
 
-// 3. 切换点赞 (不变)
+// 3. 切换点赞 (添加动画效果)
 const handleLikeToggle = async () => {
   if (!authStore.isAuthenticated) {
     router.push({ name: 'login' });
     return;
   }
+  
+  if (isLiking.value) return; // 防止重复点击
+  
+  isLiking.value = true
+  likeAnimation.value = true
+  
+  // 保存当前状态（用于回退）
+  const previousLiked = isLiked.value
+  const previousCount = likeCount.value
+  
+  // 🎯 乐观更新：立即更新UI，给用户即时反馈（这是关键！）
+  isLiked.value = !previousLiked
+  likeCount.value = previousLiked 
+    ? Math.max(0, previousCount - 1) 
+    : previousCount + 1
+  countAnimation.value = true
+  
+  console.log('👍 [点赞] 乐观更新 - 立即显示:', {
+    之前: { liked: previousLiked, count: previousCount },
+    现在: { liked: isLiked.value, count: likeCount.value }
+  })
+  
   try {
+    // 发送请求到服务器
     const response = await axios.post(`${API_URL}/api/courses/${props.courseId}/toggle-like/`);
-    isLiked.value = response.data.liked;
-    likeCount.value = response.data.count;
-    courseStore.updateCourseLikeStatus(props.courseId, response.data.liked, response.data.count);
+    console.log('👍 [点赞] 服务器响应:', response.data)
+    
+    // 使用服务器返回的真实数据（确保数据同步）
+    const serverLiked = response.data.liked !== undefined ? response.data.liked : isLiked.value
+    const serverCount = response.data.count !== undefined ? response.data.count : likeCount.value
+    
+    // 🎯 更新本地状态（使用服务器数据，但通常与乐观更新一致）
+    isLiked.value = serverLiked
+    likeCount.value = serverCount
+    
+    console.log('👍 [点赞] 服务器同步后:', {
+      liked: isLiked.value,
+      count: likeCount.value
+    })
+    
+    // 更新 store 中的状态（用于其他页面）
+    if (courseStore.updateCourseLikeStatus) {
+      courseStore.updateCourseLikeStatus(props.courseId, serverLiked, serverCount)
+    }
+
+    // 🎯 重要：不更新 currentCourse，因为这会触发 watch，可能覆盖状态
+    // 点赞状态完全由 isLiked 和 likeCount 管理，不依赖 course 对象
   } catch (error) {
-    console.error('点赞失败:', error);
+    console.error('👍 [点赞] 失败:', error);
+    // 如果失败，回退到之前的状态
+    isLiked.value = previousLiked
+    likeCount.value = previousCount
     alert('操作失败，请稍后再试。');
+  } finally {
+    isLiking.value = false
+    // 动画结束后重置
+    setTimeout(() => {
+      likeAnimation.value = false
+      countAnimation.value = false
+    }, 600)
   }
 }
 
-// 4. 【【【新增】】】: 切换收藏
+// 4. 切换收藏 (添加动画效果)
 const handleFavoriteToggle = async () => {
   if (!authStore.isAuthenticated) {
     router.push({ name: 'login' });
     return;
   }
-  // 调用 authStore 中的 action
-  await authStore.toggleFavorite(props.courseId);
-  // 'isFavorited' 计算属性会自动更新
+  
+  if (isFavoriting.value) return; // 防止重复点击
+  
+  isFavoriting.value = true
+  favoriteAnimation.value = true
+  
+  try {
+    // 调用 authStore 中的 action
+    await authStore.toggleFavorite(props.courseId);
+    // 'isFavorited' 计算属性会自动更新
+  } catch (error) {
+    console.error('收藏失败:', error);
+    alert('操作失败，请稍后再试。');
+  } finally {
+    isFavoriting.value = false
+    // 动画结束后重置
+    setTimeout(() => {
+      favoriteAnimation.value = false
+    }, 600)
+  }
 }
 
 </script>
@@ -193,6 +398,15 @@ const handleFavoriteToggle = async () => {
   <div class="watch-layout">
     
     <main class="main-content">
+      <div class="lesson-header">
+        <BackButton 
+          :fallback-route="{ name: 'course-detail', params: { id: props.courseId } }" 
+          text="返回课程"
+          small
+          inline
+        />
+      </div>
+      
       <div v-if="!lesson">
         <p>正在加载课时...</p>
       </div>
@@ -208,9 +422,19 @@ const handleFavoriteToggle = async () => {
             autoplay
             playsinline
             class="video-player"
+            @error="handleVideoError"
+            @loadeddata="handleVideoLoaded"
+            @canplay="handleVideoCanPlay"
           >
             你的浏览器不支持 Video 标签。
           </video>
+          <div v-if="videoError" class="video-error">
+            <p style="color: red; margin: 10px 0;">{{ videoError }}</p>
+            <p style="color: #666; font-size: 0.9em;">视频URL: {{ videoUrl }}</p>
+            <button @click="videoPlayer?.load()" style="margin-top: 10px; padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+              重试加载
+            </button>
+          </div>
         </div>
         
         <div v-else-if="lesson.lesson_type === 'text'">
@@ -222,12 +446,37 @@ const handleFavoriteToggle = async () => {
         </div>
 
         <div class="video-actions">
-          <button @click="handleLikeToggle" :class="['action-btn', 'like-btn', { liked: isLiked }]">
-            ❤️ {{ isLiked ? '已点赞' : '点赞' }} ({{ likeCount }})
+          <button 
+            @click="handleLikeToggle" 
+            :class="['action-btn', 'like-btn', { 
+              liked: isLiked, 
+              animating: likeAnimation,
+              loading: isLiking
+            }]"
+            :disabled="isLiking"
+          >
+            <span class="like-icon" :class="{ 'bounce': likeAnimation }">
+              {{ isLiked ? '❤️' : '♡' }}
+            </span>
+            <span class="like-text">{{ isLiked ? '已点赞' : '点赞' }}</span>
+            <span class="like-count" :class="{ 'count-bounce': countAnimation }">
+              ({{ likeCount }})
+            </span>
           </button>
           
-          <button @click="handleFavoriteToggle" :class="['action-btn', 'favorite-btn', { favorited: isFavorited }]">
-            ⭐ {{ isFavorited ? '已收藏' : '收藏' }}
+          <button 
+            @click="handleFavoriteToggle" 
+            :class="['action-btn', 'favorite-btn', { 
+              favorited: isFavorited,
+              animating: favoriteAnimation,
+              loading: isFavoriting
+            }]"
+            :disabled="isFavoriting"
+          >
+            <span class="favorite-icon" :class="{ 'spin': favoriteAnimation }">
+              {{ isFavorited ? '⭐' : '☆' }}
+            </span>
+            <span class="favorite-text">{{ isFavorited ? '已收藏' : '收藏' }}</span>
           </button>
 
           <button @click="goToNextLesson" class="action-btn next-lesson-btn">
@@ -249,10 +498,10 @@ const handleFavoriteToggle = async () => {
           <ul class="comment-list">
             <li v-for="comment in comments" :key="comment.id" class="comment-item">
               <div class="comment-header">
-                <strong>{{ comment.user.username }}</strong>
-                <small>{{ new Date(comment.created_at).toLocaleString('zh-CN') }}</small>
+                <strong>{{ comment.user?.username || '未知用户' }}</strong>
+                <small>{{ comment.created_at ? new Date(comment.created_at).toLocaleString('zh-CN') : '' }}</small>
               </div>
-              <p class="comment-content">{{ comment.content }}</p>
+              <p class="comment-content">{{ comment.content || '' }}</p>
             </li>
           </ul>
         </div>
@@ -261,8 +510,8 @@ const handleFavoriteToggle = async () => {
     </main>
 
     <nav class="sidebar-nav">
-      <h3 @click="goToCourseHome" class="sidebar-title">
-        &laquo; 返回课程列表
+      <h3 @click="goToCourseHome" class="sidebar-title" title="返回课程详情">
+        &laquo; 返回课程
       </h3>
       <div v-if="!course">加载中...</div>
       <div v-else v-for="module in course.modules" :key="module.id" class="module-group">
@@ -333,6 +582,13 @@ const handleFavoriteToggle = async () => {
   overflow-y: auto;
   background-color: #ffffff;
 }
+
+.lesson-header {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+}
+
 .main-content h2 {
   margin-top: 0;
   font-size: 2rem;
@@ -368,9 +624,29 @@ const handleFavoriteToggle = async () => {
   border: none;
   border-radius: 5px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.3s ease;
   font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
 }
+
+.action-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.action-btn:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.action-btn:not(:disabled):active {
+  transform: translateY(0);
+}
+
 .next-lesson-btn {
     background-color: #28a745;
     color: white;
@@ -378,23 +654,136 @@ const handleFavoriteToggle = async () => {
 }
 .next-lesson-btn:hover { background-color: #218838; }
 
+/* 点赞按钮样式 */
 .like-btn {
   background-color: #f0f0f0;
   color: #333;
-}
-.like-btn.liked {
-  background-color: #007bff;
-  color: white;
+  transition: all 0.3s ease;
 }
 
-/* 【【【新增】】】: 收藏按钮样式 */
+.like-btn.liked {
+  background-color: #ff1744;
+  color: white;
+  box-shadow: 0 2px 8px rgba(255, 23, 68, 0.3);
+}
+
+.like-btn.animating {
+  animation: like-pulse 0.6s ease;
+}
+
+.like-icon {
+  display: inline-block;
+  font-size: 1.2em;
+  transition: transform 0.3s ease;
+}
+
+.like-icon.bounce {
+  animation: like-bounce 0.6s ease;
+}
+
+.like-text {
+  font-weight: 500;
+}
+
+.like-count {
+  font-weight: bold;
+  transition: transform 0.3s ease;
+}
+
+.like-count.count-bounce {
+  animation: count-bounce 0.6s ease;
+}
+
+/* 收藏按钮样式 */
 .favorite-btn {
   background-color: #f0f0f0;
   color: #333;
+  transition: all 0.3s ease;
 }
+
 .favorite-btn.favorited {
-  background-color: #f0ad4e; /* 收藏用橙色 */
+  background-color: #ffa726;
   color: white;
+  box-shadow: 0 2px 8px rgba(255, 167, 38, 0.3);
+}
+
+.favorite-btn.animating {
+  animation: favorite-pulse 0.6s ease;
+}
+
+.favorite-icon {
+  display: inline-block;
+  font-size: 1.2em;
+  transition: transform 0.3s ease;
+}
+
+.favorite-icon.spin {
+  animation: favorite-spin 0.6s ease;
+}
+
+.favorite-text {
+  font-weight: 500;
+}
+
+/* 动画定义 */
+@keyframes like-bounce {
+  0%, 100% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(1.3) rotate(-5deg);
+  }
+  50% {
+    transform: scale(1.2) rotate(5deg);
+  }
+  75% {
+    transform: scale(1.1);
+  }
+}
+
+@keyframes like-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+@keyframes count-bounce {
+  0%, 100% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(1.3) translateY(-5px);
+  }
+  50% {
+    transform: scale(1.2) translateY(0);
+  }
+  75% {
+    transform: scale(1.1);
+  }
+}
+
+@keyframes favorite-spin {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.3);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes favorite-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
 }
 
 

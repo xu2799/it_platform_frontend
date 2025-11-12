@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import axios from 'axios'
+import BackButton from '@/components/BackButton.vue'
 
 const API_URL = import.meta.env.VITE_API_URL
 const authStore = useAuthStore()
@@ -11,16 +12,40 @@ const courses = ref([])
 const loading = ref(true)
 const errorMessage = ref('')
 
+// 确保axios请求包含认证token
+if (authStore.token) {
+    axios.defaults.headers.common['Authorization'] = `Token ${authStore.token}`
+}
+
 // 获取该讲师的课程
 const fetchInstructorCourses = async () => {
     loading.value = true
     errorMessage.value = ''
     try {
         const response = await axios.get(`${API_URL}/api/instructor/courses/`)
-        courses.value = response.data
+        console.log('讲师课程API响应:', response.data)
+        
+        // 处理分页响应（如果启用分页）
+        if (response.data.results) {
+            courses.value = response.data.results
+        } else if (Array.isArray(response.data)) {
+            courses.value = response.data
+        } else {
+            courses.value = []
+        }
+        
+        console.log('解析后的课程列表:', courses.value)
     } catch (error) {
         console.error('获取讲师课程失败:', error)
-        errorMessage.value = '无法加载你的课程。'
+        if (error.response) {
+            errorMessage.value = `无法加载你的课程: ${error.response.data?.detail || error.response.statusText}`
+            console.error('错误详情:', error.response.data)
+        } else if (error.request) {
+            errorMessage.value = '网络错误，请检查网络连接'
+        } else {
+            errorMessage.value = '无法加载你的课程'
+        }
+        courses.value = []
     } finally {
         loading.value = false
     }
@@ -33,15 +58,30 @@ onMounted(() => {
 // (辅助函数)
 const getFullCoverImagePath = (relativePath) => {
     if (relativePath) {
-        return relativePath;
+        // 如果是完整URL，直接返回
+        if (relativePath.startsWith('http://') || relativePath.startsWith('https://')) {
+            return relativePath
+        }
+        // 如果是相对路径，添加API URL前缀
+        return `${API_URL}${relativePath}`
     }
     return 'https://via.placeholder.com/300x150.png?text=No+Cover'
+}
+
+const handleImageError = (event) => {
+    // 图片加载失败时使用占位符
+    event.target.src = 'https://via.placeholder.com/300x150.png?text=No+Cover'
 }
 
 </script>
 
 <template>
   <div class="dashboard-container">
+    <BackButton 
+      :fallback-route="{ name: 'courses' }" 
+      text="返回课程列表"
+      small
+    />
     
     <h1 class="section-title">讲师面板 - 我的课程</h1>
     
@@ -61,6 +101,7 @@ const getFullCoverImagePath = (relativePath) => {
                 :src="getFullCoverImagePath(course.cover_image)" 
                 :alt="course.title + '封面'" 
                 class="cover-image"
+                @error="handleImageError"
             >
             <span v-if="course.category" class="category-tag">
                 {{ course.category.name }}
@@ -72,8 +113,9 @@ const getFullCoverImagePath = (relativePath) => {
         </RouterLink>
 
         <div class="card-admin-actions">
+            
             <RouterLink 
-                :to="{ name: 'course-detail', params: { id: course.id } }"
+                :to="{ name: 'course-detail', params: { id: course.id }, query: { manage: 'true' } }"
                 class="action-button manage-button"
             >
                 管理课时
@@ -101,17 +143,17 @@ const getFullCoverImagePath = (relativePath) => {
 </template>
 
 <style scoped>
-/* 【【【核心修改】】】: 移除 max-width 和 margin, 调整 padding */
+/* (样式不变) */
 .dashboard-container {
-    padding: 20px 40px; /* 顶部/底部 20px, 左/右 40px */
-    /* max-width: 1200px; */ /* <-- 已移除 */
-    /* margin: 0 auto; */    /* <-- 已移除 */
+    padding: 20px 40px; 
 }
-.section-title {
+
+.dashboard-container .section-title {
     font-size: 2.2rem;
     color: #333;
     margin-bottom: 30px;
     text-align: center;
+    margin-top: 0;
 }
 .course-grid {
     display: grid;

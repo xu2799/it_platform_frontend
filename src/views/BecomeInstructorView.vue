@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import axios from 'axios'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
+import BackButton from '@/components/BackButton.vue'
 
 const API_URL = import.meta.env.VITE_API_URL
 const router = useRouter()
@@ -52,6 +53,11 @@ const handleSubmitApplication = async () => {
 
 <template>
   <div class="application-page">
+    <BackButton 
+      :fallback-route="{ name: 'courses' }" 
+      text="返回课程列表"
+      small
+    />
     <h1>申请成为讲师</h1>
     <p class="subtitle">
         分享你的知识，创建自己的课程。请告诉我们你为什么适合成为一名讲师。
@@ -79,7 +85,15 @@ const handleSubmitApplication = async () => {
 </template>
 
 <style scoped>
-.application-page { max-width: 700px; margin: 20px auto; padding: 20px; }
+.application-page { 
+  max-width: 700px; 
+  margin: 20px auto; 
+  padding: 20px; 
+}
+
+.application-page h1 {
+  margin-top: 0;
+}
 .subtitle { font-size: 1.1rem; color: #555; }
 .application-form { display: flex; flex-direction: column; gap: 15px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; margin-top: 20px;}
 .form-group label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 1.2rem; }

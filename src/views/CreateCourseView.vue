@@ -2,7 +2,8 @@
 import { ref, onMounted } from 'vue' // <-- 导入 onMounted
 import axios from 'axios'
 import { useRouter } from 'vue-router'
-import { useCourseStore } from '@/stores/courseStore' 
+import { useCourseStore } from '@/stores/courseStore'
+import BackButton from '@/components/BackButton.vue' 
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -76,6 +77,10 @@ const handleSubmit = async () => {
 
 <template>
   <div class="create-course-page">
+    <BackButton 
+      :fallback-route="{ name: 'instructor-dashboard' }" 
+      text="返回讲师面板"
+    />
     <h1>创建新课程</h1>
     
     <p v-if="successMessage" class="message success">{{ successMessage }}</p>
@@ -118,7 +123,15 @@ const handleSubmit = async () => {
 </template>
 
 <style scoped>
-.create-course-page { max-width: 600px; margin: 0 auto; padding: 20px; }
+.create-course-page { 
+  max-width: 600px; 
+  margin: 0 auto; 
+  padding: 20px; 
+}
+
+.create-course-page h1 {
+  margin-top: 0;
+}
 .course-form { display: flex; flex-direction: column; gap: 15px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
 .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
 /* 【【【修改】】】: 为 <select> 添加样式 */

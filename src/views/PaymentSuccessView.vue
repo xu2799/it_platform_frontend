@@ -1,11 +1,11 @@
 <script setup>
 import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-// 【【【建议 1 修复】】】
-import { useAuthStore } from '@/stores/authStore'; // <-- 1. 导入
+import { useAuthStore } from '@/stores/authStore';
+import BackButton from '@/components/BackButton.vue'
 
 const router = useRouter();
-const authStore = useAuthStore(); // <-- 2. 激活
+const authStore = useAuthStore();
 
 onMounted(() => {
   // 【【【建议 1 修复】】】
@@ -23,11 +23,14 @@ onMounted(() => {
 
 <template>
   <div class="payment-result success">
+    <BackButton 
+      :fallback-route="{ name: 'courses' }" 
+      text="返回课程列表"
+      small
+    />
     <h1>支付成功！🎉</h1>
     <p>感谢您购买本课程。您的学习之旅即将开始。</p>
     <p class="small-text">（注意：订单创建将在后端 Webhook 验证后完成）</p>
-    
-    <button @click="router.push('/courses')" class="btn">返回课程列表</button>
   </div>
 </template>
 

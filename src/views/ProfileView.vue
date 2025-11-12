@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
 import axios from 'axios'
+import BackButton from '@/components/BackButton.vue'
 
 const API_URL = import.meta.env.VITE_API_URL
 const authStore = useAuthStore()
@@ -32,6 +33,11 @@ const handleProfileUpdate = async () => {
 
 <template>
   <div class="profile-page">
+    <BackButton 
+      :fallback-route="{ name: 'courses' }" 
+      text="返回"
+      small
+    />
     <h1>个人资料</h1>
     <h2>欢迎, {{ authStore.user?.username }}</h2>
 
@@ -51,7 +57,15 @@ const handleProfileUpdate = async () => {
 </template>
 
 <style scoped>
-.profile-page { max-width: 600px; margin: 20px auto; padding: 20px; }
+.profile-page { 
+  max-width: 600px; 
+  margin: 20px auto; 
+  padding: 20px; 
+}
+
+.profile-page h1 {
+  margin-top: 0;
+}
 .profile-form { display: flex; flex-direction: column; gap: 15px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
 .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
 .form-group textarea { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; font-family: inherit; }

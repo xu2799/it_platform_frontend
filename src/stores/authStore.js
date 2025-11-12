@@ -50,6 +50,9 @@ export const useAuthStore = defineStore('auth', () => {
         password: password
       })
       const receivedToken = response.data.token
+      if (!receivedToken) {
+        throw new Error('未收到认证令牌')
+      }
       token.value = receivedToken
       localStorage.setItem('token', receivedToken)
       axios.defaults.headers.common['Authorization'] = `Token ${receivedToken}`
@@ -58,10 +61,22 @@ export const useAuthStore = defineStore('auth', () => {
       await fetchUser() 
       
       console.log('AuthStore: 登录成功!')
-      return true 
+      return { success: true, error: null }
     } catch (error) {
       console.error('AuthStore: 登录失败!', error)
-      return false
+      let errorMessage = '登录失败，请稍后重试'
+      if (error.response) {
+        // 服务器返回了错误响应
+        if (error.response.status === 400 || error.response.status === 401) {
+          errorMessage = '用户名或密码错误'
+        } else if (error.response.status >= 500) {
+          errorMessage = '服务器错误，请稍后重试'
+        }
+      } else if (error.request) {
+        // 请求已发出但没有收到响应
+        errorMessage = '网络错误，请检查网络连接'
+      }
+      return { success: false, error: errorMessage }
     }
   }
 

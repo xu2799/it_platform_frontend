@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue' 
+import { watch, onMounted } from 'vue' // <-- 【【【已修改】】】: 移除了 ref
 import { RouterLink, useRoute } from 'vue-router'
 import { useCourseStore } from '@/stores/courseStore'
 import { useAuthStore } from '@/stores/authStore' 
@@ -8,7 +8,7 @@ const courseStore = useCourseStore()
 const authStore = useAuthStore() 
 const route = useRoute() 
 
-const hoveredCourseId = ref(null) 
+// 【【【已移除】】】: hoveredCourseId (未被使用)
 
 onMounted(() => {
   if (authStore.token && !authStore.user) {
@@ -28,19 +28,23 @@ watch(() => route.query, (newQuery) => {
 // --- (辅助函数) ---
 const getFullCoverImagePath = (relativePath) => {
     if (relativePath) {
-        return relativePath;
+        // 如果是完整URL，直接返回
+        if (relativePath.startsWith('http://') || relativePath.startsWith('https://')) {
+            return relativePath
+        }
+        // 如果是相对路径，添加API URL前缀
+        const API_URL = import.meta.env.VITE_API_URL
+        return `${API_URL}${relativePath}`
     }
     return 'https://via.placeholder.com/300x150.png?text=No+Cover'
 }
 
-const isCourseOwner = (course) => {
-    if (!authStore.isAuthenticated || !authStore.user) return false
-    if (authStore.user.role === 'admin') return true
-    if (authStore.user.role === 'instructor') {
-        return course.instructor?.id === authStore.user.id
-    }
-    return false
+const handleImageError = (event) => {
+    // 图片加载失败时使用占位符
+    event.target.src = 'https://via.placeholder.com/300x150.png?text=No+Cover'
 }
+
+// 【【【已移除】】】: isCourseOwner (此页面不再需要)
 </script>
 
 <template>
@@ -53,8 +57,19 @@ const isCourseOwner = (course) => {
         </RouterLink>
     </div>
 
-    <section class="course-grid">
-      
+    <!-- 加载状态 -->
+    <div v-if="courseStore.isLoading" class="loading-container">
+      <p>正在加载课程...</p>
+    </div>
+
+    <!-- 错误状态 -->
+    <div v-else-if="courseStore.error" class="error-container">
+      <p class="error-message">{{ courseStore.error }}</p>
+      <button @click="courseStore.fetchCourses(route.query)" class="retry-button">重试</button>
+    </div>
+
+    <!-- 课程列表 -->
+    <section v-else class="course-grid">
       <div 
         v-for="course in courseStore.courses" 
         :key="course.id" 
@@ -66,6 +81,7 @@ const isCourseOwner = (course) => {
                 :src="getFullCoverImagePath(course.cover_image)" 
                 :alt="course.title + '封面'" 
                 class="cover-image"
+                @error="handleImageError"
             >
             <span v-if="course.category" class="category-tag">
                 {{ course.category.name }}
@@ -79,37 +95,24 @@ const isCourseOwner = (course) => {
                 讲师: {{ course.instructor?.username || '平台认证' }}
               </span>
               <span class="like-stats">
-                ❤️ {{ course.like_count }}
+                ❤️ {{ course.like_count || 0 }}
               </span>
             </div>
           </div>
         </RouterLink>
-
-        <div v-if="isCourseOwner(course)" class="card-admin-actions">
-            <RouterLink 
-                :to="{ name: 'course-edit', params: { id: course.id } }"
-                class="edit-button"
-            >
-                编辑课程
-            </RouterLink>
-        </div>
-
       </div>
-      
     </section>
     
-    <div v-if="!courseStore.courses || courseStore.courses.length === 0" class="no-results">
+    <div v-if="!courseStore.isLoading && !courseStore.error && (!courseStore.courses || courseStore.courses.length === 0)" class="no-results">
         <p>没有找到符合条件的课程。</p>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* 【【【核心修改】】】: 移除 max-width 和 margin, 调整 padding */
+/* (容器样式不变) */
 .course-list-container {
-    padding: 20px 40px; /* 顶部/底部 20px, 左/右 40px */
-    /* max-width: 1200px; */ /* <-- 已移除 */
-    /* margin: 0 auto; */    /* <-- 已移除 */
+    padding: 20px 40px; 
 }
 
 .search-result-header {
@@ -124,7 +127,7 @@ const isCourseOwner = (course) => {
     color: #007bff;
 }
 
-/* --- (其余样式均不变) --- */
+/* (卡片网格样式不变) */
 .course-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -195,12 +198,12 @@ const isCourseOwner = (course) => {
     max-height: 3em; 
 }
 
-/* 【【【新增/修改】】】: 底部信息栏 */
+/* (底部信息栏样式不变) */
 .card-footer-stats {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: auto; /* 关键: 推到底部 */
+    margin-top: auto;
 }
 .instructor-name {
     font-size: 0.85rem;
@@ -213,26 +216,42 @@ const isCourseOwner = (course) => {
     font-weight: bold;
 }
 
-/* (不变) */
-.card-admin-actions {
-    padding: 0 15px 15px 15px; 
-    margin-top: auto; 
+/* 【【【已移除】】】: .card-admin-actions 和 .edit-button 的样式 */
+
+/* 加载和错误状态 */
+.loading-container {
+    text-align: center;
+    padding: 50px;
+    font-size: 1.2rem;
+    color: #555;
 }
-.edit-button {
-    display: block;
-    width: 100%;
-    padding: 10px;
+
+.error-container {
+    text-align: center;
+    padding: 50px;
+}
+
+.error-message {
+    color: #dc3545;
+    font-size: 1.1rem;
+    margin-bottom: 20px;
+}
+
+.retry-button {
+    padding: 10px 20px;
     background-color: #007bff;
     color: white;
-    text-align: center;
-    text-decoration: none;
+    border: none;
     border-radius: 5px;
-    font-weight: bold;
-    transition: background-color 0.2s;
+    cursor: pointer;
+    font-size: 1rem;
 }
-.edit-button:hover {
+
+.retry-button:hover {
     background-color: #0056b3;
 }
+
+/* (无结果样式不变) */
 .no-results {
     text-align: center;
     padding: 50px;

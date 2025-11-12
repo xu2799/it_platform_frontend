@@ -82,11 +82,12 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
                 </RouterLink>
                 <RouterLink
                     v-for="category in courseStore.categories"
-                    :key="category.id"
-                    :to="{ name: 'courses', query: { category: category.slug } }"
+                    :key="category?.id || Math.random()"
+                    :to="{ name: 'courses', query: { category: category?.slug || '' } }"
                     class="dropdown-item"
+                    v-if="category"
                 >
-                    {{ category.name }}
+                    {{ category.name || '未知分类' }}
                 </RouterLink>
             </div>
           </li>

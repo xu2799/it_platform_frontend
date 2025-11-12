@@ -1,13 +1,19 @@
 <script setup>
 import { useRouter } from 'vue-router';
+import BackButton from '@/components/BackButton.vue'
+
 const router = useRouter();
 </script>
 
 <template>
   <div class="payment-result cancel">
+    <BackButton 
+      :fallback-route="{ name: 'courses' }" 
+      text="返回课程列表"
+      small
+    />
     <h1>支付已取消或失败 😢</h1>
     <p>您的支付过程已终止。您可以随时返回重新尝试购买。</p>
-    <button @click="router.push('/')" class="btn">返回主页</button>
   </div>
 </template>
 

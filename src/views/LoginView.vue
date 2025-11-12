@@ -10,13 +10,22 @@ const username = ref('')
 const password = ref('')
 const errorMessage = ref('') 
 
+const isLoading = ref(false)
+
 const handleSubmit = async () => {
-  errorMessage.value = '' 
-  const loginSuccess = await authStore.login(username.value, password.value)
-  if (loginSuccess) {
-    router.push({ name: 'courses' }) 
-  } else {
-    errorMessage.value = '用户名或密码错误。'
+  errorMessage.value = ''
+  isLoading.value = true
+  try {
+    const result = await authStore.login(username.value, password.value)
+    if (result.success) {
+      router.push({ name: 'courses' }) 
+    } else {
+      errorMessage.value = result.error || '用户名或密码错误'
+    }
+  } catch (error) {
+    errorMessage.value = '登录失败，请稍后重试'
+  } finally {
+    isLoading.value = false
   }
 }
 </script>
@@ -51,7 +60,9 @@ const handleSubmit = async () => {
               {{ errorMessage }}
             </p>
 
-            <button type="submit" class="submit-button primary">登录</button>
+            <button type="submit" class="submit-button primary" :disabled="isLoading">
+              {{ isLoading ? '登录中...' : '登录' }}
+            </button>
         </form>
         
         <div class="auth-footer-links">

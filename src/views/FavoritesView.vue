@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore' 
 import axios from 'axios'
+import BackButton from '@/components/BackButton.vue'
 
 const API_URL = import.meta.env.VITE_API_URL
 const authStore = useAuthStore() 
@@ -48,6 +49,11 @@ const isStillFavorited = (courseId) => {
 
 <template>
   <div class="favorites-container">
+    <BackButton 
+      :fallback-route="{ name: 'courses' }" 
+      text="返回课程列表"
+      small
+    />
     
     <h1 class="section-title">我的收藏</h1>
     
@@ -102,14 +108,14 @@ const isStillFavorited = (courseId) => {
 */
 .favorites-container {
     padding: 20px 40px; 
-    /* max-width: 1200px; */ /* (已移除) */
-    /* margin: 0 auto; */
 }
-.section-title {
+
+.favorites-container .section-title {
     font-size: 2.2rem;
     color: #333;
     margin-bottom: 30px;
     text-align: center;
+    margin-top: 0;
 }
 
 /* --- 卡片网格 --- */

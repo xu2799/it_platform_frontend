@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import BackButton from '@/components/BackButton.vue'
 
 const API_URL = import.meta.env.VITE_API_URL
 const applications = ref([])
@@ -54,6 +55,11 @@ const formatDate = (dateString) => {
 
 <template>
   <div class="admin-page">
+    <BackButton 
+      :fallback-route="{ name: 'courses' }" 
+      text="返回课程列表"
+      small
+    />
     <h1>管理讲师申请</h1>
 
     <div v-if="loading">正在加载...</div>
@@ -97,8 +103,16 @@ const formatDate = (dateString) => {
 </template>
 
 <style scoped>
-.admin-page { max-width: 1000px; margin: 20px auto; padding: 20px; }
-h1 { text-align: center; }
+.admin-page { 
+  max-width: 1000px; 
+  margin: 20px auto; 
+  padding: 20px; 
+}
+
+.admin-page h1 { 
+  text-align: center; 
+  margin-top: 0;
+}
 
 .applications-table {
     width: 100%;
