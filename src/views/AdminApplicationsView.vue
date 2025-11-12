@@ -1,47 +1,47 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+// 【【【修改】】】: 导入 apiClient
+import apiClient from '@/api'
 import BackButton from '@/components/BackButton.vue'
 
-const API_URL = import.meta.env.VITE_API_URL
+// (API_URL 已移至 apiClient)
 const applications = ref([])
 const loading = ref(true)
 const errorMessage = ref('')
 
-// 获取所有申请
 const fetchApplications = async () => {
     loading.value = true
     errorMessage.value = ''
     try {
-        const response = await axios.get(`${API_URL}/api/applications/`)
+        // 【【【修改】】】: 使用 apiClient
+        const response = await apiClient.get('/api/applications/')
         applications.value = response.data
     } catch (error) {
-        console.error('获取申请失败:', error)
+        console.error('获取申请失败:', error.response?.data || error.message)
         errorMessage.value = '无法加载申请列表。'
     } finally {
         loading.value = false
     }
 }
 
-// 审批
 const handleApproval = async (application, newStatus) => {
     if (!confirm(`确定要 "${newStatus === 'approved' ? '批准' : '拒绝'}" ${application.user.username} 的申请吗？`)) {
         return
     }
     
     try {
-        const response = await axios.patch(`${API_URL}/api/applications/${application.id}/`, {
+        // 【【【修改】】】: 使用 apiClient
+        const response = await apiClient.patch(`/api/applications/${application.id}/`, {
             status: newStatus
         })
         
-        // 更新列表中的状态
         const index = applications.value.findIndex(app => app.id === application.id)
         if (index !== -1) {
             applications.value[index] = response.data
         }
         
     } catch (error) {
-        console.error('审批失败:', error)
+        console.error('审批失败:', error.response?.data || error.message)
         alert('操作失败！')
     }
 }
@@ -103,17 +103,16 @@ const formatDate = (dateString) => {
 </template>
 
 <style scoped>
+/* 样式部分 (完全不变) */
 .admin-page { 
   max-width: 1000px; 
   margin: 20px auto; 
   padding: 20px; 
 }
-
 .admin-page h1 { 
   text-align: center; 
   margin-top: 0;
 }
-
 .applications-table {
     width: 100%;
     border-collapse: collapse;
@@ -148,11 +147,9 @@ const formatDate = (dateString) => {
 }
 .btn.approve { background-color: #28a745; }
 .btn.reject { background-color: #dc3545; }
-
 .status-pending { color: #f0ad4e; font-weight: bold; }
 .status-approved { color: #28a745; font-weight: bold; }
 .status-rejected { color: #dc3545; font-weight: bold; }
-
 .message { padding: 15px; border-radius: 4px; margin-bottom: 15px; font-size: 1.1rem; text-align: center; }
 .error { background-color: #f8d7da; color: #721c24; border-color: #f5c6cb; }
 </style>

@@ -1,11 +1,12 @@
 <script setup>
 import { ref } from 'vue'
-import axios from 'axios'
+// 【【【修改】】】: 导入 apiClient
+import apiClient from '@/api'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import BackButton from '@/components/BackButton.vue'
 
-const API_URL = import.meta.env.VITE_API_URL
+// (API_URL 已移至 apiClient)
 const router = useRouter()
 const authStore = useAuthStore()
 
@@ -17,31 +18,20 @@ const handleSubmitApplication = async () => {
     errorMessage.value = ''
     successMessage.value = ''
     
-    // 【【【已移除】】】: 移除 50 字符检查
-    /*
-    if (justification.value.trim().length < 50) {
-        errorMessage.value = '申请理由不能少于 50 个字符。'
-        return
-    }
-    */
-
     try {
-        const response = await axios.post(`${API_URL}/api/applications/`, {
+        // 【【【修改】】】: 使用 apiClient
+        const response = await apiClient.post('/api/applications/', {
             justification: justification.value
         })
         
         successMessage.value = '申请提交成功！管理员将会审核您的请求。'
         
-        // (可选) 刷新用户信息, 也许 authStore 需要跟踪申请状态
-        // authStore.fetchUser() 
-        
-        // 2秒后跳转回首页
         setTimeout(() => {
             router.push({ name: 'courses' })
         }, 2000)
 
     } catch (error) {
-        console.error('申请失败:', error)
+        console.error('申请失败:', error.response?.data || error.message)
         if (error.response?.data?.detail) {
              errorMessage.value = error.response.data.detail
         } else {
@@ -85,12 +75,12 @@ const handleSubmitApplication = async () => {
 </template>
 
 <style scoped>
+/* 样式部分 (完全不变) */
 .application-page { 
   max-width: 700px; 
   margin: 20px auto; 
   padding: 20px; 
 }
-
 .application-page h1 {
   margin-top: 0;
 }

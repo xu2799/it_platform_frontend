@@ -3,11 +3,12 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useCourseStore } from '@/stores/courseStore'
 import { useAuthStore } from '@/stores/authStore'
-import axios from 'axios'
+// 【【【修改】】】: 导入 apiClient
+import apiClient from '@/api'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
 import BackButton from '@/components/BackButton.vue'
 
-const API_URL = import.meta.env.VITE_API_URL
+// (API_URL 已移至 apiClient)
 
 // --- 2. 激活仓库和路由 ---
 const courseStore = useCourseStore()
@@ -23,44 +24,29 @@ const props = defineProps({
   }
 })
 
-// --- 4. 【【【已修改】】】 状态 (State) ---
-// (A) 添加新章节的状态
+// --- 4. 状态 (State) ---
 const newModuleTitle = ref('')
-
-// (B) 添加新课时的状态 (不再是全局，而是按模块)
-const openModuleFormId = ref(null) // 跟踪哪个模块的表单被打开了
-const currentLessonTitle = ref('') // 正在添加的课时标题
-const currentVideoFile = ref(null) // 正在添加的视频文件
-const uploadStatus = ref('')     // 上传状态
-
-// (C) 编辑课时的状态
-const editingLessonId = ref(null) // 正在编辑的课时ID
-const editLessonTitle = ref('') // 编辑中的课时标题
-const editLessonVideoFile = ref(null) // 编辑中的视频文件
-const editLessonOrder = ref(0) // 编辑中的课时顺序
-const isUpdatingLesson = ref(false) // 是否正在更新课时
-
-// (D) 删除课时的状态
-const deletingLessonId = ref(null) // 正在删除的课时ID
-const showDeleteLessonConfirm = ref(false) // 显示删除确认对话框
-const isDeletingLesson = ref(false) // 是否正在删除课时
-const lessonToDelete = ref(null) // 要删除的课时信息
-
-// (E) 消息状态
+const openModuleFormId = ref(null) 
+const currentLessonTitle = ref('') 
+const currentVideoFile = ref(null) 
+const uploadStatus = ref('')     
+const editingLessonId = ref(null) 
+const editLessonTitle = ref('') 
+const editLessonVideoFile = ref(null) 
+const editLessonOrder = ref(0) 
+const isUpdatingLesson = ref(false) 
+const deletingLessonId = ref(null) 
+const showDeleteLessonConfirm = ref(false) 
+const isDeletingLesson = ref(false) 
+const lessonToDelete = ref(null) 
 const lessonErrorMessage = ref('')
 const lessonSuccessMessage = ref('')
-
-// (F) 课时排序状态
-const isMovingLesson = ref(false) // 是否正在移动课时
+const isMovingLesson = ref(false) 
 
 // --- 5. 计算属性 (Computed) ---
-
-// 查找当前课程
 const course = computed(() => {
   return courseStore.courses.find(c => c.id == props.id)
 })
-
-// 检查是否为讲师/管理员
 const isInstructorOfCourse = computed(() => {
   if (!authStore.isAuthenticated) return false
   if (authStore.user.role === 'admin') return true
@@ -70,18 +56,19 @@ const isInstructorOfCourse = computed(() => {
   return false
 })
 
-
 // --- 6. 生命周期函数 ---
 let videoCheckInterval = null
-
 onMounted(() => {
   courseStore.fetchCourseDetail(props.id)
-  
-  // 检查是否有正在处理的视频，如果有则启动自动刷新
   startVideoProcessingCheck()
 })
+onUnmounted(() => {
+  if (videoCheckInterval) {
+    clearInterval(videoCheckInterval)
+  }
+})
 
-// 检查是否有正在处理的视频
+// --- 7. 视频处理检查 (不变) ---
 const hasProcessingVideos = () => {
   if (!course.value || !course.value.modules) return false
   for (const module of course.value.modules) {
@@ -95,43 +82,26 @@ const hasProcessingVideos = () => {
   }
   return false
 }
-
-// 启动视频处理状态检查
 const startVideoProcessingCheck = () => {
-  // 清除之前的定时器
   if (videoCheckInterval) {
     clearInterval(videoCheckInterval)
   }
-  
-  // 每10秒检查一次视频处理状态
   videoCheckInterval = setInterval(async () => {
     if (hasProcessingVideos()) {
-      // 刷新课程详情以获取最新的视频处理状态
       await courseStore.fetchCourseDetail(props.id)
     } else {
-      // 如果没有正在处理的视频，停止检查
       clearInterval(videoCheckInterval)
       videoCheckInterval = null
     }
-  }, 10000) // 10秒检查一次
+  }, 10000)
 }
 
-// 组件卸载时清理定时器
-onUnmounted(() => {
-  if (videoCheckInterval) {
-    clearInterval(videoCheckInterval)
-  }
-})
-
-// --- 7. 监听课程数据变化，重新启动视频处理检查 ---
+// --- 8. 监听 (不变) ---
 watch(course, (newCourse) => {
   if (newCourse) {
-    // 如果课程数据更新，重新启动视频处理检查
     startVideoProcessingCheck()
   }
-  
   if (route.query.manage === 'true') {
-    console.log("从讲师面板进入，禁用自动跳转。");
     return;
   }
   if (newCourse && newCourse.modules && newCourse.modules.length > 0) {
@@ -148,74 +118,58 @@ watch(course, (newCourse) => {
   immediate: true
 })
 
-
-// --- 8. 【【【已修改】】】 核心功能函数 ---
-
-// (A) 处理文件选择 (更新为 currentVideoFile)
+// --- 9. 【【【已修改】】】 核心功能函数 ---
 const handleFileChange = (event) => {
   currentVideoFile.value = event.target.files ? event.target.files[0] : null
 }
-
-// (B) 显示/隐藏 课时表单
 const showLessonForm = (moduleId) => {
-  // 如果正在编辑课时，不允许打开添加表单
   if (editingLessonId.value !== null) {
     return
   }
-  
   if (openModuleFormId.value === moduleId) {
-    // 如果重复点击，则关闭
     openModuleFormId.value = null;
   } else {
-    // 否则打开对应的表单
     openModuleFormId.value = moduleId;
-    // 并重置表单内容
     currentLessonTitle.value = '';
     currentVideoFile.value = null;
     uploadStatus.value = '';
   }
 }
 
-// (C) 添加新章节 (不变)
+// (C) 添加新章节
 const handleAddModule = async () => {
   if (!newModuleTitle.value.trim()) return
-
   try {
     const moduleData = { course: props.id, title: newModuleTitle.value }
-    const response = await axios.post(`${API_URL}/api/modules/`, moduleData)
-
+    // 【【【修改】】】: 使用 apiClient
+    const response = await apiClient.post('/api/modules/', moduleData)
     if (course.value.modules) {
       course.value.modules.push(response.data)
     }
     courseStore.markAsStale()
     newModuleTitle.value = ''
-
   } catch (error) {
-    console.error('创建章节失败:', error)
+    console.error('创建章节失败:', error.response?.data || error.message)
     alert('创建章节失败！请确保你已登录且具有讲师权限。')
   }
 }
 
-// (D) 添加新课时 (更新为使用 current 状态)
+// (D) 添加新课时
 const handleAddLesson = async (moduleId) => {
   if (!currentLessonTitle.value.trim() || !moduleId || !currentVideoFile.value) {
     alert('请填写课时标题并上传文件。')
     return
   }
-
   uploadStatus.value = '视频上传中...'
   const formData = new FormData()
   formData.append('title', currentLessonTitle.value)
   formData.append('module', moduleId)
   formData.append('video_file', currentVideoFile.value)
-
   try {
-    const response = await axios.post(`${API_URL}/api/lessons/`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+    // 【【【修改】】】: 使用 apiClient
+    const response = await apiClient.post('/api/lessons/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
     })
-
     const targetModule = course.value.modules.find(m => m.id == moduleId)
     if (targetModule) {
       targetModule.lessons = targetModule.lessons || []
@@ -223,21 +177,13 @@ const handleAddLesson = async (moduleId) => {
     }
     courseStore.markAsStale()
     uploadStatus.value = '上传成功！视频正在后台处理中...'
-    
-    // 重新获取课程详情以获取最新状态
     await courseStore.fetchCourseDetail(props.id)
-    
-    // 启动视频处理状态检查
     startVideoProcessingCheck()
-    
-    // 成功后重置并关闭表单
     setTimeout(() => {
-        showLessonForm(moduleId); // 调用 showLessonForm 来关闭
+        showLessonForm(moduleId);
     }, 1500);
-
-
   } catch (error) {
-    console.error('上传课时失败:', error)
+    console.error('上传课时失败:', error.response?.data || error.message)
     uploadStatus.value = '上传失败！请检查文件大小或权限。'
     if (error.response) {
       uploadStatus.value = error.response.data.detail || '上传失败！请检查文件大小或权限。'
@@ -247,11 +193,9 @@ const handleAddLesson = async (moduleId) => {
 
 // (E) 编辑课时
 const startEditLesson = (lesson) => {
-  // 如果正在添加课时，先关闭添加表单
   if (openModuleFormId.value !== null) {
     openModuleFormId.value = null
   }
-  
   editingLessonId.value = lesson.id
   editLessonTitle.value = lesson.title
   editLessonOrder.value = lesson.order || 0
@@ -259,7 +203,6 @@ const startEditLesson = (lesson) => {
   lessonErrorMessage.value = ''
   lessonSuccessMessage.value = ''
 }
-
 const cancelEditLesson = () => {
   editingLessonId.value = null
   editLessonTitle.value = ''
@@ -268,37 +211,28 @@ const cancelEditLesson = () => {
   lessonErrorMessage.value = ''
   lessonSuccessMessage.value = ''
 }
-
 const handleEditLessonFileChange = (event) => {
   editLessonVideoFile.value = event.target.files ? event.target.files[0] : null
 }
-
 const handleUpdateLesson = async (lessonId, moduleId) => {
   if (!editLessonTitle.value.trim()) {
     lessonErrorMessage.value = '课时标题不能为空'
     return
   }
-
   isUpdatingLesson.value = true
   lessonErrorMessage.value = ''
   lessonSuccessMessage.value = ''
-
   const formData = new FormData()
   formData.append('title', editLessonTitle.value.trim())
   formData.append('order', editLessonOrder.value)
-  
   if (editLessonVideoFile.value) {
     formData.append('video_file', editLessonVideoFile.value)
   }
-
   try {
-    const response = await axios.patch(`${API_URL}/api/lessons/${lessonId}/`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+    // 【【【修改】】】: 使用 apiClient
+    const response = await apiClient.patch(`/api/lessons/${lessonId}/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
     })
-
-    // 更新本地数据
     const targetModule = course.value.modules.find(m => m.id == moduleId)
     if (targetModule && targetModule.lessons) {
       const lessonIndex = targetModule.lessons.findIndex(l => l.id == lessonId)
@@ -306,17 +240,13 @@ const handleUpdateLesson = async (lessonId, moduleId) => {
         targetModule.lessons[lessonIndex] = response.data
       }
     }
-    
     courseStore.markAsStale()
     lessonSuccessMessage.value = '课时更新成功！'
-    
-    // 关闭编辑表单
     setTimeout(() => {
       cancelEditLesson()
     }, 1500)
-
   } catch (error) {
-    console.error('更新课时失败:', error)
+    console.error('更新课时失败:', error.response?.data || error.message)
     if (error.response) {
       if (error.response.status === 403) {
         lessonErrorMessage.value = '权限不足！只有本课程讲师和管理员才能编辑。'
@@ -341,50 +271,38 @@ const startDeleteLesson = (lesson) => {
   showDeleteLessonConfirm.value = true
   lessonErrorMessage.value = ''
 }
-
 const cancelDeleteLesson = () => {
   showDeleteLessonConfirm.value = false
   lessonToDelete.value = null
   deletingLessonId.value = null
 }
-
 const handleDeleteLesson = async () => {
   if (!lessonToDelete.value) return
-
   deletingLessonId.value = lessonToDelete.value.id
   isDeletingLesson.value = true
   lessonErrorMessage.value = ''
-
   try {
-    const response = await axios.delete(`${API_URL}/api/lessons/${lessonToDelete.value.id}/`)
-    
-    // 从本地数据中删除
+    // 【【【修改】】】: 使用 apiClient
+    const response = await apiClient.delete(`/api/lessons/${lessonToDelete.value.id}/`)
     const targetModule = course.value.modules.find(m => 
       m.lessons && m.lessons.some(l => l.id === lessonToDelete.value.id)
     )
     if (targetModule && targetModule.lessons) {
       targetModule.lessons = targetModule.lessons.filter(l => l.id !== lessonToDelete.value.id)
     }
-    
     courseStore.markAsStale()
-    
     const deletedInfo = response.data?.deleted
     if (deletedInfo) {
       lessonSuccessMessage.value = `课时"${lessonToDelete.value.title}" 已成功删除! (已删除 ${deletedInfo.comments_count || 0} 条评论)`
     } else {
       lessonSuccessMessage.value = `课时"${lessonToDelete.value.title}" 已成功删除!`
     }
-    
-    // 关闭确认对话框
     cancelDeleteLesson()
-    
-    // 清除成功消息
     setTimeout(() => {
       lessonSuccessMessage.value = ''
     }, 3000)
-
   } catch (error) {
-    console.error('删除课时失败:', error)
+    console.error('删除课时失败:', error.response?.data || error.message)
     if (error.response) {
       if (error.response.status === 403) {
         lessonErrorMessage.value = '权限不足！只有本课程讲师和管理员才能删除。'
@@ -407,7 +325,6 @@ const handleDeleteLesson = async () => {
 // 辅助函数：对课时列表进行排序
 const sortedLessons = (lessons) => {
   if (!lessons || lessons.length === 0) return []
-  // 创建副本并排序
   return [...lessons].sort((a, b) => {
     const orderA = a.order !== undefined && a.order !== null ? a.order : 999
     const orderB = b.order !== undefined && b.order !== null ? b.order : 999
@@ -418,63 +335,39 @@ const sortedLessons = (lessons) => {
 // (G) 课时排序功能
 const handleMoveLessonUp = async (lesson, moduleId) => {
   if (isMovingLesson.value) return
-  
   const targetModule = course.value.modules.find(m => m.id == moduleId)
   if (!targetModule || !targetModule.lessons) return
-  
-  // 获取排序后的列表
   const sorted = sortedLessons(targetModule.lessons)
-  
-  // 找到当前课时在排序后列表中的索引
   const currentIndex = sorted.findIndex(l => l.id === lesson.id)
-  if (currentIndex <= 0) return // 已经是第一个，无法上移
-  
-  // 找到上一个课时
+  if (currentIndex <= 0) return
   const prevLesson = sorted[currentIndex - 1]
-  
-  // 交换order值
   const currentOrder = lesson.order !== undefined && lesson.order !== null ? lesson.order : currentIndex
   const prevOrder = prevLesson.order !== undefined && prevLesson.order !== null ? prevLesson.order : (currentIndex - 1)
-  
   await swapLessonOrder(lesson, prevLesson, currentOrder, prevOrder, targetModule)
 }
-
 const handleMoveLessonDown = async (lesson, moduleId) => {
   if (isMovingLesson.value) return
-  
   const targetModule = course.value.modules.find(m => m.id == moduleId)
   if (!targetModule || !targetModule.lessons) return
-  
-  // 获取排序后的列表
   const sorted = sortedLessons(targetModule.lessons)
-  
-  // 找到当前课时在排序后列表中的索引
   const currentIndex = sorted.findIndex(l => l.id === lesson.id)
-  if (currentIndex < 0 || currentIndex >= sorted.length - 1) return // 已经是最后一个，无法下移
-  
-  // 找到下一个课时
+  if (currentIndex < 0 || currentIndex >= sorted.length - 1) return
   const nextLesson = sorted[currentIndex + 1]
-  
-  // 交换order值
   const currentOrder = lesson.order !== undefined && lesson.order !== null ? lesson.order : currentIndex
   const nextOrder = nextLesson.order !== undefined && nextLesson.order !== null ? nextLesson.order : (currentIndex + 1)
-  
   await swapLessonOrder(lesson, nextLesson, currentOrder, nextOrder, targetModule)
 }
-
 const swapLessonOrder = async (lesson1, lesson2, order1, order2, module) => {
   isMovingLesson.value = true
   lessonErrorMessage.value = ''
   lessonSuccessMessage.value = ''
-  
   try {
-    // 同时更新两个课时的order
+    // 【【【修改】】】: 使用 apiClient
     const [response1, response2] = await Promise.all([
-      axios.patch(`${API_URL}/api/lessons/${lesson1.id}/`, { order: order2 }),
-      axios.patch(`${API_URL}/api/lessons/${lesson2.id}/`, { order: order1 })
+      apiClient.patch(`/api/lessons/${lesson1.id}/`, { order: order2 }),
+      apiClient.patch(`/api/lessons/${lesson2.id}/`, { order: order1 })
     ])
     
-    // 更新本地数据（后端返回的数据已经包含更新后的order值）
     const lesson1Index = module.lessons.findIndex(l => l.id === lesson1.id)
     const lesson2Index = module.lessons.findIndex(l => l.id === lesson2.id)
     
@@ -485,23 +378,20 @@ const swapLessonOrder = async (lesson1, lesson2, order1, order2, module) => {
       module.lessons[lesson2Index] = { ...response2.data, order: order1 }
     }
     
-    // 重新排序列表（按order排序）
     module.lessons.sort((a, b) => {
       const orderA = a.order !== undefined && a.order !== null ? a.order : 999
       const orderB = b.order !== undefined && b.order !== null ? b.order : 999
       return orderA - orderB
     })
     
-    // 标记为过期，下次访问时会自动刷新
     courseStore.markAsStale()
-    
     lessonSuccessMessage.value = '课时顺序已更新'
     setTimeout(() => {
       lessonSuccessMessage.value = ''
     }, 2000)
     
   } catch (error) {
-    console.error('移动课时失败:', error)
+    console.error('移动课时失败:', error.response?.data || error.message)
     if (error.response) {
       if (error.response.status === 403) {
         lessonErrorMessage.value = '权限不足！只有本课程讲师和管理员才能调整顺序。'
@@ -550,7 +440,6 @@ const swapLessonOrder = async (lesson1, lesson2, order1, order2, module) => {
 
       <h2>课程内容:</h2>
 
-      <!-- 消息提示 -->
       <div v-if="lessonSuccessMessage" class="lesson-message success">
         {{ lessonSuccessMessage }}
       </div>
@@ -558,7 +447,6 @@ const swapLessonOrder = async (lesson1, lesson2, order1, order2, module) => {
         {{ lessonErrorMessage }}
       </div>
       
-      <!-- 视频处理提示 -->
       <div v-if="hasProcessingVideos()" class="video-processing-notice">
         <p>⏳ 检测到正在处理的视频，系统将自动刷新状态...</p>
         <button @click="courseStore.fetchCourseDetail(props.id)" class="btn-refresh">
@@ -590,7 +478,6 @@ const swapLessonOrder = async (lesson1, lesson2, order1, order2, module) => {
               :key="lesson.id"
               class="lesson-item"
             >
-              <!-- 编辑模式 -->
               <div v-if="editingLessonId === lesson.id" class="lesson-edit-form">
                 <form @submit.prevent="handleUpdateLesson(lesson.id, module.id)">
                   <div class="form-group">
@@ -620,10 +507,8 @@ const swapLessonOrder = async (lesson1, lesson2, order1, order2, module) => {
                 </form>
               </div>
               
-              <!-- 显示模式 -->
               <div v-else class="lesson-display">
                 <div class="lesson-main-content">
-                  <!-- 排序控制按钮 -->
                   <div v-if="isInstructorOfCourse" class="lesson-sort-controls">
                     <button 
                       @click="handleMoveLessonUp(lesson, module.id)"
@@ -661,7 +546,6 @@ const swapLessonOrder = async (lesson1, lesson2, order1, order2, module) => {
                   </RouterLink>
                 </div>
                 
-                <!-- 编辑和删除按钮 -->
                 <div v-if="isInstructorOfCourse" class="lesson-actions">
                   <button 
                     @click="startEditLesson(lesson)" 
@@ -727,7 +611,6 @@ const swapLessonOrder = async (lesson1, lesson2, order1, order2, module) => {
 
     </div>
 
-    <!-- 删除课时确认对话框 -->
     <div v-if="showDeleteLessonConfirm" class="delete-confirm-overlay" @click.self="cancelDeleteLesson">
       <div class="delete-confirm-dialog">
         <h3>确认删除课时</h3>
@@ -757,24 +640,20 @@ const swapLessonOrder = async (lesson1, lesson2, order1, order2, module) => {
 </template>
 
 <style scoped>
+/* 样式部分 (完全不变) */
 .course-detail { 
   max-width: 800px; 
   margin: 0 auto; 
-  padding: 20px; /* 调整内边距 */
+  padding: 20px;
 }
-
 .course-header-actions {
   margin-bottom: 20px;
   display: flex;
   align-items: center;
 }
-
-/* 课程信息 (不变) */
 hr { margin: 25px 0; }
 h1 { font-size: 2.2rem; }
 h2 { margin-bottom: 15px; }
-
-/* --- 【【【新样式】】】: 模块化管理 --- */
 .content-management {
   display: flex;
   flex-direction: column;
@@ -784,7 +663,7 @@ h2 { margin-bottom: 15px; }
   border: 1px solid #e0e0e0;
   border-radius: 8px;
   background-color: #fcfcfc;
-  overflow: hidden; /* 确保圆角生效 */
+  overflow: hidden;
 }
 .module-header {
   display: flex;
@@ -816,8 +695,6 @@ h2 { margin-bottom: 15px; }
   padding: 10px 20px 20px 20px;
   margin: 0;
 }
-
-/* 内联的“添加课时”表单 */
 .add-lesson-form-inline {
   padding: 20px;
   background-color: #fdfdfd;
@@ -828,8 +705,6 @@ h2 { margin-bottom: 15px; }
   flex-direction: column;
   gap: 15px;
 }
-
-/* 课时列表 */
 .lesson-item {
     margin-bottom: 10px;
     border-radius: 4px;
@@ -837,7 +712,6 @@ h2 { margin-bottom: 15px; }
     background-color: #fff;
     overflow: hidden;
 }
-
 .lesson-display {
     display: flex;
     justify-content: space-between;
@@ -845,7 +719,6 @@ h2 { margin-bottom: 15px; }
     padding: 12px 15px;
     gap: 12px;
 }
-
 .lesson-main-content {
     display: flex;
     align-items: center;
@@ -853,7 +726,6 @@ h2 { margin-bottom: 15px; }
     gap: 12px;
     min-width: 0;
 }
-
 .lesson-sort-controls {
     display: flex;
     flex-direction: column;
@@ -861,7 +733,6 @@ h2 { margin-bottom: 15px; }
     flex-shrink: 0;
     margin-right: 4px;
 }
-
 .btn-sort {
     width: 32px;
     height: 20px;
@@ -879,36 +750,30 @@ h2 { margin-bottom: 15px; }
     transition: all 0.2s;
     line-height: 1;
 }
-
 .btn-sort:hover:not(:disabled) {
     background-color: #007bff;
     color: white;
     border-color: #007bff;
     transform: scale(1.05);
 }
-
 .btn-sort:active:not(:disabled) {
     transform: scale(0.95);
 }
-
 .btn-sort:disabled {
     opacity: 0.3;
     cursor: not-allowed;
     background-color: #f8f9fa;
 }
-
 .btn-sort-up {
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
     border-bottom: none;
 }
-
 .btn-sort-down {
     border-top-left-radius: 0;
     border-top-right-radius: 0;
     margin-top: -1px;
 }
-
 .lesson-number {
     font-weight: bold;
     color: #6c757d;
@@ -917,7 +782,6 @@ h2 { margin-bottom: 15px; }
     min-width: 24px;
     text-align: right;
 }
-
 .lesson-link {
   flex: 1;
   text-decoration: none;
@@ -925,34 +789,28 @@ h2 { margin-bottom: 15px; }
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 0; /* 允许文本溢出时显示省略号 */
+  min-width: 0;
 }
-
 .lesson-link:hover {
     color: #007bff;
 }
-
 .lesson-title {
     font-weight: 500;
 }
-
 .lesson-status {
     font-size: 0.85rem;
     color: #888;
     margin-left: 8px;
 }
-
 .lesson-status.success {
     color: #28a745;
     font-weight: 500;
 }
-
 .lesson-status.processing {
     color: #ffc107;
     font-weight: 500;
     animation: pulse 2s infinite;
 }
-
 @keyframes pulse {
     0%, 100% {
         opacity: 1;
@@ -961,7 +819,6 @@ h2 { margin-bottom: 15px; }
         opacity: 0.6;
     }
 }
-
 .video-processing-notice {
     background-color: #fff3cd;
     border: 1px solid #ffc107;
@@ -972,13 +829,11 @@ h2 { margin-bottom: 15px; }
     justify-content: space-between;
     align-items: center;
 }
-
 .video-processing-notice p {
     margin: 0;
     color: #856404;
     font-size: 0.95rem;
 }
-
 .btn-refresh {
     padding: 6px 12px;
     background-color: #ffc107;
@@ -990,16 +845,13 @@ h2 { margin-bottom: 15px; }
     font-weight: bold;
     transition: background-color 0.2s;
 }
-
 .btn-refresh:hover {
     background-color: #ffb300;
 }
-
 .lesson-actions {
     display: flex;
     gap: 8px;
 }
-
 .btn-edit-lesson,
 .btn-delete-lesson {
     padding: 5px 12px;
@@ -1010,43 +862,34 @@ h2 { margin-bottom: 15px; }
     font-weight: bold;
     transition: background-color 0.2s;
 }
-
 .btn-edit-lesson {
     background-color: #007bff;
     color: white;
 }
-
 .btn-edit-lesson:hover {
     background-color: #0056b3;
 }
-
 .btn-delete-lesson {
     background-color: #dc3545;
     color: white;
 }
-
 .btn-delete-lesson:hover {
     background-color: #c82333;
 }
-
-/* 编辑课时表单 */
 .lesson-edit-form {
     padding: 15px;
     background-color: #f9f9f9;
     border-top: 2px solid #007bff;
 }
-
 .lesson-edit-form .form-group {
     margin-bottom: 12px;
 }
-
 .lesson-edit-form .form-group label {
     display: block;
     font-weight: bold;
     margin-bottom: 5px;
     font-size: 0.9rem;
 }
-
 .lesson-edit-form .form-group input {
     width: 100%;
     padding: 8px;
@@ -1054,13 +897,11 @@ h2 { margin-bottom: 15px; }
     border-radius: 4px;
     box-sizing: border-box;
 }
-
 .lesson-edit-actions {
     display: flex;
     gap: 10px;
     margin-top: 15px;
 }
-
 .btn-save,
 .btn-cancel {
     padding: 8px 16px;
@@ -1070,61 +911,49 @@ h2 { margin-bottom: 15px; }
     font-weight: bold;
     transition: background-color 0.2s;
 }
-
 .btn-save {
     background-color: #28a745;
     color: white;
 }
-
 .btn-save:hover:not(:disabled) {
     background-color: #218838;
 }
-
 .btn-cancel {
     background-color: #6c757d;
     color: white;
 }
-
 .btn-cancel:hover:not(:disabled) {
     background-color: #5a6268;
 }
-
 .btn-save:disabled,
 .btn-cancel:disabled {
     opacity: 0.6;
     cursor: not-allowed;
 }
-
 .lesson-empty {
     font-style: italic;
     color: #888;
     padding: 10px 15px;
 }
-
-/* 消息提示 */
 .lesson-message {
     padding: 12px;
     border-radius: 4px;
     margin-bottom: 15px;
     font-size: 0.95rem;
 }
-
 .lesson-message.success {
     background-color: #d4edda;
     color: #155724;
     border: 1px solid #c3e6cb;
 }
-
 .lesson-message.error {
     background-color: #f8d7da;
     color: #721c24;
     border: 1px solid #f5c6cb;
 }
-
-/* 移到底部的“添加章节”表单 */
 .add-chapter-panel {
   margin-top: 30px;
-  border: 2px dashed #28a745; /* 改为绿色以区分 */
+  border: 2px dashed #28a745; 
   padding: 15px;
   border-radius: 8px;
   background-color: #f0fff4;
@@ -1144,8 +973,6 @@ h2 { margin-bottom: 15px; }
   border: 1px solid #ccc; 
   border-radius: 4px; 
 }
-
-/* 通用表单元素 */
 .form-group label { 
   display: block;
   font-weight: bold; 
@@ -1157,7 +984,7 @@ h2 { margin-bottom: 15px; }
   padding: 8px; 
   border: 1px solid #ccc; 
   border-radius: 4px;
-  box-sizing: border-box; /* 确保 padding 不会撑开宽度 */
+  box-sizing: border-box;
 }
 .admin-button { 
   padding: 10px 15px; 
@@ -1173,7 +1000,7 @@ h2 { margin-bottom: 15px; }
 }
 .upload-button { 
   background-color: #28a745; 
-  align-self: flex-start; /* 按钮不要撑满 */
+  align-self: flex-start;
 }
 .upload-button:hover {
   background-color: #218838;
@@ -1182,8 +1009,6 @@ h2 { margin-bottom: 15px; }
     margin-top: 10px; 
     font-weight: bold; 
 }
-
-/* 删除确认对话框 */
 .delete-confirm-overlay {
     position: fixed;
     top: 0;
@@ -1196,7 +1021,6 @@ h2 { margin-bottom: 15px; }
     align-items: center;
     z-index: 1000;
 }
-
 .delete-confirm-dialog {
     background-color: white;
     padding: 30px;
@@ -1205,31 +1029,26 @@ h2 { margin-bottom: 15px; }
     width: 90%;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
-
 .delete-confirm-dialog h3 {
     margin-top: 0;
     color: #dc3545;
     font-size: 1.5rem;
 }
-
 .delete-confirm-dialog p {
     margin: 15px 0;
     line-height: 1.6;
 }
-
 .warning-text {
     color: #dc3545;
     font-weight: bold;
     font-size: 0.95rem;
 }
-
 .confirm-actions {
     display: flex;
     gap: 10px;
     margin-top: 25px;
     justify-content: flex-end;
 }
-
 .confirm-button {
     padding: 10px 20px;
     border: none;
@@ -1239,26 +1058,21 @@ h2 { margin-bottom: 15px; }
     font-weight: bold;
     transition: background-color 0.2s;
 }
-
 .confirm-button:disabled {
     opacity: 0.6;
     cursor: not-allowed;
 }
-
 .cancel-button {
     background-color: #6c757d;
     color: white;
 }
-
 .cancel-button:hover:not(:disabled) {
     background-color: #5a6268;
 }
-
 .delete-confirm-button {
     background-color: #dc3545;
     color: white;
 }
-
 .delete-confirm-button:hover:not(:disabled) {
     background-color: #c82333;
 }

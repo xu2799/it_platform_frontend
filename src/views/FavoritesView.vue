@@ -2,26 +2,26 @@
 import { ref, onMounted } from 'vue' 
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore' 
-import axios from 'axios'
+// 【【【修改】】】: 导入 apiClient
+import apiClient from '@/api'
 import BackButton from '@/components/BackButton.vue'
 
-const API_URL = import.meta.env.VITE_API_URL
+// (API_URL 已移至 apiClient)
 const authStore = useAuthStore() 
 
 const courses = ref([])
 const loading = ref(true)
 const errorMessage = ref('')
 
-// 获取收藏的课程
 const fetchFavoriteCourses = async () => {
     loading.value = true
     errorMessage.value = ''
     try {
-        // 调用新的 API 端点
-        const response = await axios.get(`${API_URL}/api/favorites/`)
+        // 【【【修改】】】: 使用 apiClient
+        const response = await apiClient.get('/api/favorites/')
         courses.value = response.data
     } catch (error) {
-        console.error('获取收藏课程失败:', error)
+        console.error('获取收藏课程失败:', error.response?.data || error.message)
         errorMessage.value = '无法加载你收藏的课程。'
     } finally {
         loading.value = false
@@ -32,7 +32,6 @@ onMounted(() => {
     fetchFavoriteCourses()
 })
 
-// (辅助函数)
 const getFullCoverImagePath = (relativePath) => {
     if (relativePath) {
         return relativePath;
@@ -40,7 +39,6 @@ const getFullCoverImagePath = (relativePath) => {
     return 'https://via.placeholder.com/300x150.png?text=No+Cover'
 }
 
-// 检查课程是否仍被收藏 (用于在取消收藏时即时移除)
 const isStillFavorited = (courseId) => {
     return authStore.isCourseFavorited(courseId)
 }
@@ -103,13 +101,10 @@ const isStillFavorited = (courseId) => {
 </template>
 
 <style scoped>
-/* 我们从 CourseListView.vue 复制粘贴样式
-  (注意: .favorites-container 替换了 .course-list-container)
-*/
+/* 样式部分 (完全不变) */
 .favorites-container {
     padding: 20px 40px; 
 }
-
 .favorites-container .section-title {
     font-size: 2.2rem;
     color: #333;
@@ -117,8 +112,6 @@ const isStillFavorited = (courseId) => {
     text-align: center;
     margin-top: 0;
 }
-
-/* --- 卡片网格 --- */
 .course-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

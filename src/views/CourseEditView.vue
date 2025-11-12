@@ -1,11 +1,12 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+// 【【【修改】】】: 导入 apiClient
+import apiClient from '@/api'
 import { useRouter, useRoute } from 'vue-router'
 import { useCourseStore } from '@/stores/courseStore'
 import BackButton from '@/components/BackButton.vue' 
 
-const API_URL = import.meta.env.VITE_API_URL
+// (API_URL 已移至 apiClient)
 
 const router = useRouter()
 const route = useRoute() 
@@ -15,7 +16,6 @@ const courseId = route.params.id
 
 const title = ref('')
 const description = ref('')
-// const price = ref(0.00) // <-- 【【【已移除】】】
 const categoryId = ref(null) 
 const coverImageFile = ref(null) 
     
@@ -29,18 +29,14 @@ const currentCourse = ref(null)
 
 // 页面加载时, 获取课程详情和分类
 onMounted(async () => {
-  // 确保分类已加载
   if (courseStore.categories.length === 0) {
     await courseStore.fetchCategories()
   }
   
   try {
-    // 从 store 获取课程详情
     const course = await courseStore.fetchCourseDetail(courseId)
     if (course) {
-      // 保存课程信息
       currentCourse.value = course
-      // 填充表单
       title.value = course.title
       description.value = course.description
       categoryId.value = course.category?.id || null
@@ -64,19 +60,17 @@ const handleUpdate = async () => {
   successMessage.value = ''
   isUpdating.value = true
 
-  // 验证必填字段
+  // (验证不变)
   if (!title.value.trim()) {
       errorMessage.value = '课程标题不能为空'
       isUpdating.value = false
       return
   }
-
   if (!description.value.trim()) {
       errorMessage.value = '课程描述不能为空'
       isUpdating.value = false
       return
   }
-
   if (!categoryId.value) {
       errorMessage.value = '请选择一个课程分类'
       isUpdating.value = false
@@ -95,24 +89,22 @@ const handleUpdate = async () => {
   try {
     console.log('正在更新课程数据 (FormData)...')
     
-    // 使用 PATCH 请求
-    const response = await axios.patch(`${API_URL}/api/courses/${courseId}/`, formData, {
+    // 【【【修改】】】: 使用 apiClient
+    const response = await apiClient.patch(`/api/courses/${courseId}/`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
     })
     
-    courseStore.markAsStale() // 标记列表为"陈旧"
-
+    courseStore.markAsStale() 
     successMessage.value = `课程"${response.data.title}" 更新成功!`
     
-    // 2秒后跳转回讲师面板
     setTimeout(() => {
         router.push({ name: 'instructor-dashboard' })
     }, 2000)
     
   } catch (error) {
-    console.error('更新课程失败:', error)
+    console.error('更新课程失败:', error.response?.data || error.message)
     if (error.response) {
       if (error.response.status === 403) {
         errorMessage.value = '权限不足! 只有本课程讲师和管理员才能编辑。'
@@ -144,10 +136,10 @@ const handleDelete = async () => {
   try {
     console.log('正在删除课程...')
     
-    const response = await axios.delete(`${API_URL}/api/courses/${courseId}/`)
+    // 【【【修改】】】: 使用 apiClient
+    const response = await apiClient.delete(`/api/courses/${courseId}/`)
     
-    courseStore.markAsStale() // 标记列表为"陈旧"
-
+    courseStore.markAsStale() 
     const courseTitle = currentCourse.value?.title || '课程'
     const deletedInfo = response.data?.deleted
     
@@ -157,13 +149,12 @@ const handleDelete = async () => {
       successMessage.value = `课程"${courseTitle}" 已成功删除!`
     }
     
-    // 2秒后跳转回讲师面板
     setTimeout(() => {
         router.push({ name: 'instructor-dashboard' })
     }, 2000)
     
   } catch (error) {
-    console.error('删除课程失败:', error)
+    console.error('删除课程失败:', error.response?.data || error.message)
     showDeleteConfirm.value = false
     if (error.response) {
       if (error.response.status === 403) {
@@ -250,7 +241,6 @@ const cancelDelete = () => {
       </div>
     </form>
 
-    <!-- 删除确认对话框 -->
     <div v-if="showDeleteConfirm" class="delete-confirm-overlay" @click.self="cancelDelete">
       <div class="delete-confirm-dialog">
         <h3>确认删除</h3>
@@ -280,12 +270,12 @@ const cancelDelete = () => {
 </template>
 
 <style scoped>
+/* 样式部分 (完全不变) */
 .edit-course-page { 
   max-width: 600px; 
   margin: 20px auto; 
   padding: 20px; 
 }
-
 .edit-course-page h1 {
   margin-top: 0;
 }
@@ -306,7 +296,6 @@ const cancelDelete = () => {
     gap: 15px;
     margin-top: 10px;
 }
-
 .submit-button { 
     flex: 1;
     padding: 12px; 
@@ -318,33 +307,25 @@ const cancelDelete = () => {
     font-weight: bold;
     transition: background-color 0.2s;
 }
-
 .submit-button:disabled {
     opacity: 0.6;
     cursor: not-allowed;
 }
-
 .update-button {
     background-color: #007bff;
 }
-
 .update-button:hover:not(:disabled) {
     background-color: #0056b3;
 }
-
 .delete-button {
     background-color: #dc3545;
 }
-
 .delete-button:hover:not(:disabled) {
     background-color: #c82333;
 }
-
 .message { padding: 10px; border-radius: 4px; margin-bottom: 15px; }
 .success { background-color: #d4edda; color: #155724; border-color: #c3e6cb; }
 .error { background-color: #f8d7da; color: #721c24; border-color: #f5c6cb; }
-
-/* 删除确认对话框 */
 .delete-confirm-overlay {
     position: fixed;
     top: 0;
@@ -357,7 +338,6 @@ const cancelDelete = () => {
     align-items: center;
     z-index: 1000;
 }
-
 .delete-confirm-dialog {
     background-color: white;
     padding: 30px;
@@ -366,31 +346,26 @@ const cancelDelete = () => {
     width: 90%;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
-
 .delete-confirm-dialog h3 {
     margin-top: 0;
     color: #dc3545;
     font-size: 1.5rem;
 }
-
 .delete-confirm-dialog p {
     margin: 15px 0;
     line-height: 1.6;
 }
-
 .warning-text {
     color: #dc3545;
     font-weight: bold;
     font-size: 0.95rem;
 }
-
 .confirm-actions {
     display: flex;
     gap: 10px;
     margin-top: 25px;
     justify-content: flex-end;
 }
-
 .confirm-button {
     padding: 10px 20px;
     border: none;
@@ -400,26 +375,21 @@ const cancelDelete = () => {
     font-weight: bold;
     transition: background-color 0.2s;
 }
-
 .confirm-button:disabled {
     opacity: 0.6;
     cursor: not-allowed;
 }
-
 .cancel-button {
     background-color: #6c757d;
     color: white;
 }
-
 .cancel-button:hover:not(:disabled) {
     background-color: #5a6268;
 }
-
 .delete-confirm-button {
     background-color: #dc3545;
     color: white;
 }
-
 .delete-confirm-button:hover:not(:disabled) {
     background-color: #c82333;
 }

@@ -1,13 +1,13 @@
 <script setup>
 import { ref } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
-import axios from 'axios'
+// 【【【修改】】】: 导入 apiClient
+import apiClient from '@/api'
 import BackButton from '@/components/BackButton.vue'
 
-const API_URL = import.meta.env.VITE_API_URL
+// (API_URL 已移至 apiClient)
 const authStore = useAuthStore()
 
-// 预填充 bio
 const bio = ref(authStore.user?.bio || '')
 const successMessage = ref('')
 const errorMessage = ref('')
@@ -16,16 +16,19 @@ const handleProfileUpdate = async () => {
     successMessage.value = ''
     errorMessage.value = ''
     try {
-        const response = await axios.patch(`${API_URL}/api/users/me/`, {
+        // 【【【修改】】】: 使用 apiClient
+        const response = await apiClient.patch('/api/users/me/', {
             bio: bio.value
         })
         
-        // 更新 Pinia 仓库
         authStore.user.bio = response.data.bio
+        // 【【【新增】】】: 同时更新 localStorage
+        localStorage.setItem('user', JSON.stringify(authStore.user))
+        
         successMessage.value = '个人资料更新成功！'
 
     } catch (error) {
-        console.error('更新失败:', error)
+        console.error('更新失败:', error.response?.data || error.message)
         errorMessage.value = '更新失败，请稍后再试。'
     }
 }
@@ -57,12 +60,12 @@ const handleProfileUpdate = async () => {
 </template>
 
 <style scoped>
+/* 样式部分 (完全不变) */
 .profile-page { 
   max-width: 600px; 
   margin: 20px auto; 
   padding: 20px; 
 }
-
 .profile-page h1 {
   margin-top: 0;
 }

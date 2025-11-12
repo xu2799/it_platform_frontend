@@ -2,30 +2,27 @@
 import { ref, onMounted, computed } from 'vue' 
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
-import axios from 'axios'
+// 【【【修改】】】: 导入 apiClient
+import apiClient from '@/api'
 import BackButton from '@/components/BackButton.vue'
 
-const API_URL = import.meta.env.VITE_API_URL
+// (API_URL 已移至 apiClient)
 const authStore = useAuthStore()
 
 const courses = ref([])
 const loading = ref(true)
 const errorMessage = ref('')
 
-// 确保axios请求包含认证token
-if (authStore.token) {
-    axios.defaults.headers.common['Authorization'] = `Token ${authStore.token}`
-}
+// (不再需要手动设置 axios defaults)
 
-// 获取该讲师的课程
 const fetchInstructorCourses = async () => {
     loading.value = true
     errorMessage.value = ''
     try {
-        const response = await axios.get(`${API_URL}/api/instructor/courses/`)
+        // 【【【修改】】】: 使用 apiClient
+        const response = await apiClient.get('/api/instructor/courses/')
         console.log('讲师课程API响应:', response.data)
         
-        // 处理分页响应（如果启用分页）
         if (response.data.results) {
             courses.value = response.data.results
         } else if (Array.isArray(response.data)) {
@@ -36,7 +33,7 @@ const fetchInstructorCourses = async () => {
         
         console.log('解析后的课程列表:', courses.value)
     } catch (error) {
-        console.error('获取讲师课程失败:', error)
+        console.error('获取讲师课程失败:', error.response?.data || error.message)
         if (error.response) {
             errorMessage.value = `无法加载你的课程: ${error.response.data?.detail || error.response.statusText}`
             console.error('错误详情:', error.response.data)
@@ -55,21 +52,19 @@ onMounted(() => {
     fetchInstructorCourses()
 })
 
-// (辅助函数)
 const getFullCoverImagePath = (relativePath) => {
     if (relativePath) {
-        // 如果是完整URL，直接返回
         if (relativePath.startsWith('http://') || relativePath.startsWith('https://')) {
             return relativePath
         }
-        // 如果是相对路径，添加API URL前缀
-        return `${API_URL}${relativePath}`
+        // 【【【修改】】】: 使用 apiClient 的 baseURL
+        const baseUrl = apiClient.defaults.baseURL || ''
+        return `${baseUrl}${relativePath}`
     }
     return 'https://via.placeholder.com/300x150.png?text=No+Cover'
 }
 
 const handleImageError = (event) => {
-    // 图片加载失败时使用占位符
     event.target.src = 'https://via.placeholder.com/300x150.png?text=No+Cover'
 }
 
@@ -143,11 +138,10 @@ const handleImageError = (event) => {
 </template>
 
 <style scoped>
-/* (样式不变) */
+/* 样式部分 (完全不变) */
 .dashboard-container {
     padding: 20px 40px; 
 }
-
 .dashboard-container .section-title {
     font-size: 2.2rem;
     color: #333;
