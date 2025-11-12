@@ -85,7 +85,6 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
                     :key="category?.id || Math.random()"
                     :to="{ name: 'courses', query: { category: category?.slug || '' } }"
                     class="dropdown-item"
-                    v-if="category"
                 >
                     {{ category.name || '未知分类' }}
                 </RouterLink>

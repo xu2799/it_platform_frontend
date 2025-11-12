@@ -3,7 +3,6 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { useCourseStore } from '@/stores/courseStore'
 import { useAuthStore } from '@/stores/authStore' 
-// 【【【修改】】】: 导入我们新的 apiClient
 import apiClient from '@/api'
 import BackButton from '@/components/BackButton.vue'
 
@@ -23,21 +22,28 @@ const videoPlayer = ref(null)
 const videoError = ref(null)
 const comments = ref([])
 const newComment = ref('')
-const isLiking = ref(false)
-const isFavoriting = ref(false)
+
+// --- (Bug 2 修复: 点赞/收藏状态) ---
+// 我们使用本地 ref 作为 UI 的“事实来源”，以解决命名冲突
+const isLiked = ref(false)
+const likeCount = ref(0)
+const isFavorited = ref(false)
+
+// API 加载锁
+const isLiking = ref(false) 
+const isFavoritingLoading = ref(false) 
+
+// 动画状态
 const likeAnimation = ref(false)
 const favoriteAnimation = ref(false)
 const countAnimation = ref(false)
-
-// 计算属性
-const isFavorited = computed(() => authStore.isCourseFavorited(props.courseId))
+// --- (修复结束) ---
 
 const resolveMediaUrl = (url) => {
   if (!url) return null
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return url
   }
-  // 使用 apiClient 的 baseURL
   const baseUrl = apiClient.defaults.baseURL || ''
   if (url.startsWith('/')) {
     return `${baseUrl}${url}`
@@ -50,7 +56,16 @@ onMounted(async () => {
   console.log('🌐 [调试] 课程ID:', props.courseId)
   console.log('🌐 [调试] 课时ID:', props.lessonId)
   try {
-    await courseStore.fetchCourseDetail(props.courseId)
+    const courseData = await courseStore.fetchCourseDetail(props.courseId)
+    
+    // --- (Bug 2 修复: 填充本地 ref) ---
+    if (courseData) {
+      isLiked.value = courseData.is_liked
+      likeCount.value = courseData.like_count
+      isFavorited.value = courseData.is_favorited
+    }
+    // --- (修复结束) ---
+
   } catch (error) {
     console.error('❌ [课程详情] 获取失败:', error)
   }
@@ -68,7 +83,7 @@ const handleVideoCanPlay = () => {
   console.log('✅ [视频就绪] 视频可以播放')
 }
 
-// --- 计算属性 (作为“事实来源”) ---
+// --- 计算属性 (用于侧边栏和视频 URL) ---
 const course = computed(() => {
   return courseStore.courses.find(c => c.id == props.courseId) || null
 })
@@ -84,9 +99,7 @@ const lesson = computed(() => {
   return null
 })
 
-// 【【【关键】】】: 这些现在 100% 依赖 store
-const isLiked = computed(() => course.value?.is_liked ?? false)
-const likeCount = computed(() => course.value?.like_count ?? 0)
+// (冲突的 isLiked 和 likeCount 的 computed 已被【删除】)
 
 const videoUrl = computed(() => {
   if (!lesson.value) return null
@@ -113,10 +126,16 @@ watch(videoUrl, (newUrl) => {
   }
 })
 
-watch(() => props.lessonId, (newLessonId, oldLessonId) => {
+watch(() => props.lessonId, async (newLessonId, oldLessonId) => {
     if (newLessonId && newLessonId !== oldLessonId) {
         fetchComments(newLessonId)
-        courseStore.fetchCourseDetail(props.courseId)
+        // 切换课时后，也必须重新填充本地 ref
+        const courseData = await courseStore.fetchCourseDetail(props.courseId)
+        if (courseData) {
+          isLiked.value = courseData.is_liked
+          likeCount.value = courseData.like_count
+          isFavorited.value = courseData.is_favorited
+        }
     }
 })
 
@@ -155,7 +174,6 @@ const goToCourseHome = () => {
 const fetchComments = async (lessonId) => {
   if (!lessonId) return;
   try {
-    // 【【【修改】】】: 使用 apiClient
     const response = await apiClient.get('/api/comments/', {
       params: { lesson_id: lessonId }
     });
@@ -165,6 +183,7 @@ const fetchComments = async (lessonId) => {
   }
 }
 
+// --- (Bug 3 修复: 评论) ---
 const handlePostComment = async () => {
   if (!newComment.value.trim()) return;
   if (!authStore.isAuthenticated) {
@@ -172,9 +191,9 @@ const handlePostComment = async () => {
     return;
   }
   try {
-    // 【【【修改】】】: 使用 apiClient
     const response = await apiClient.post('/api/comments/', {
-      lesson: props.lessonId,
+      // 修复：将 lessonId 从字符串转换为数字
+      lesson: Number(props.lessonId),
       content: newComment.value
     });
     comments.value.unshift(response.data); 
@@ -185,7 +204,7 @@ const handlePostComment = async () => {
   }
 }
 
-// 【【【关键】】】: 点赞
+// --- (Bug 2 修复: 点赞) ---
 const handleLikeToggle = async () => {
   if (!authStore.isAuthenticated) {
     router.push({ name: 'login' });
@@ -198,24 +217,20 @@ const handleLikeToggle = async () => {
   countAnimation.value = true 
   
   try {
-    // 【【【修改】】】: 使用 apiClient (它会自动附加 token)
-    // 之前这个请求会因为缺少 token 而 401/403 失败
     const response = await apiClient.post(`/api/courses/${props.courseId}/toggle-like/`);
-    console.log('👍 [点赞] 服务器响应:', response.data)
     
-    // 调用 store action (这个函数现在可以正确触发响应式)
-    if (courseStore.updateCourseLikeStatus) {
-      courseStore.updateCourseLikeStatus(
-        props.courseId, 
-        response.data.liked, 
-        response.data.count
-      )
-    }
+    // (A) 更新 Pinia store（为了让其他页面保持同步）
+    courseStore.updateCourseLikeStatus(
+      props.courseId, 
+      response.data.liked, 
+      response.data.count
+    )
     
-    console.log('👍 [点赞] Store 已更新，UI 应该会响应...');
+    // (B) ！！！直接更新本地 ref，强制 UI 刷新！！！
+    isLiked.value = response.data.liked
+    likeCount.value = response.data.count
     
   } catch (error) {
-    // 认证失败会在这里被捕获
     console.error('👍 [点赞] 失败:', error.response?.data || error.message);
     alert('操作失败，请稍后再试。');
   } finally {
@@ -227,29 +242,35 @@ const handleLikeToggle = async () => {
   }
 }
 
-// (收藏功能不变)
+// --- (Bug 2 修复: 收藏) ---
 const handleFavoriteToggle = async () => {
   if (!authStore.isAuthenticated) {
     router.push({ name: 'login' });
     return;
   }
-  if (isFavoriting.value) return; 
+  if (isFavoritingLoading.value) return; 
   
-  isFavoriting.value = true
+  isFavoritingLoading.value = true
   favoriteAnimation.value = true
   
   try {
-    await authStore.toggleFavorite(props.courseId);
+    // (A) 更新 Auth store
+    const newFavoriteStatus = await authStore.toggleFavorite(props.courseId);
+
+    // (B) ！！！直接更新本地 ref，强制 UI 刷新！！！
+    isFavorited.value = newFavoriteStatus
+
   } catch (error) {
     console.error('收藏失败:', error);
     alert('操作失败，请稍后再试。');
   } finally {
-    isFavoriting.value = false
+    isFavoritingLoading.value = false
     setTimeout(() => {
       favoriteAnimation.value = false
     }, 600)
   }
 }
+// --- (修复结束) ---
 
 </script>
 
@@ -270,7 +291,7 @@ const handleFavoriteToggle = async () => {
         <p>正在加载课程数据...</p>
       </div>
       
-      <div v-else-if="!lesson">
+      <div v-else-if="!course.modules || !lesson">
         <p>正在加载课时...</p>
       </div>
       
@@ -332,9 +353,9 @@ const handleFavoriteToggle = async () => {
             :class="['action-btn', 'favorite-btn', { 
               favorited: isFavorited,
               animating: favoriteAnimation,
-              loading: isFavoriting
+              loading: isFavoritingLoading
             }]"
-            :disabled="isFavoriting"
+            :disabled="isFavoritingLoading"
           >
             <span class="favorite-icon" :class="{ 'spin': favoriteAnimation }">
               {{ isFavorited ? '⭐' : '☆' }}
@@ -376,7 +397,9 @@ const handleFavoriteToggle = async () => {
       <h3 @click="goToCourseHome" class="sidebar-title" title="返回课程详情">
         &laquo; 返回课程
       </h3>
-      <div v-if="!course">加载中...</div>
+      
+      <div v-if="!course || !course.modules">加载中...</div>
+      
       <div v-else v-for="module in course.modules" :key="module.id" class="module-group">
         <h4>{{ module.title }}</h4>
         <ul>
