@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue' // <--- 关键修复: 导入 nextTick
 import { useRouter, RouterLink } from 'vue-router'
 import { useCourseStore } from '@/stores/courseStore'
 import { useAuthStore } from '@/stores/authStore' 
@@ -219,7 +219,7 @@ const handleLikeToggle = async () => {
   try {
     const response = await apiClient.post(`/api/courses/${props.courseId}/toggle-like/`);
     
-    // (A) 更新 Pinia store（为了让其他页面保持同步）
+    // (A) 更新 Pinia store（现在这是安全的，不会抛出错误）
     courseStore.updateCourseLikeStatus(
       props.courseId, 
       response.data.liked, 
@@ -229,6 +229,9 @@ const handleLikeToggle = async () => {
     // (B) ！！！直接更新本地 ref，强制 UI 刷新！！！
     isLiked.value = response.data.liked
     likeCount.value = response.data.count
+    
+    // 【【【修复：使用 nextTick 确保 DOM 立即更新】】】
+    await nextTick();
     
   } catch (error) {
     console.error('👍 [点赞] 失败:', error.response?.data || error.message);
@@ -259,6 +262,9 @@ const handleFavoriteToggle = async () => {
 
     // (B) ！！！直接更新本地 ref，强制 UI 刷新！！！
     isFavorited.value = newFavoriteStatus
+    
+    // 【【【修复：使用 nextTick 确保 DOM 立即更新】】】
+    await nextTick();
 
   } catch (error) {
     console.error('收藏失败:', error);

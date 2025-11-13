@@ -111,19 +111,25 @@ export const useCourseStore = defineStore('courses', () => {
     isStale.value = true
   }
 
+  // 【【【 ！！！ 关键修复 ！！！ 】】】
+  // 我们必须让这个函数更安全，以防 courseToUpdate 为 undefined
   function updateCourseLikeStatus(courseId, isLiked, likeCount) {
-    // 修复点赞响应式：直接修改 Pinia state 中的对象属性
-    const courseToUpdate = courses.value.find(c => c.id == courseId);
-    
-    if (courseToUpdate) {
-      console.log(`Pinia: 正在响应式地更新课程 ${courseId} (直接修改属性)`);
-      
-      courseToUpdate.is_liked = isLiked;
-      courseToUpdate.like_count = likeCount;
-      
-      isStale.value = true;
-    } else {
-       console.warn(`Pinia: (updateCourseLikeStatus) 未能在 store 中找到 courseId ${courseId}`);
+    try {
+        const courseToUpdate = courses.value.find(c => c.id == courseId);
+        
+        if (courseToUpdate) {
+            console.log(`Pinia: 正在响应式地更新课程 ${courseId} (直接修改属性)`);
+            
+            courseToUpdate.is_liked = isLiked;
+            courseToUpdate.like_count = likeCount;
+            
+            isStale.value = true;
+        } else {
+            console.warn(`Pinia: (updateCourseLikeStatus) 未能在 store 中找到 courseId ${courseId}。这在 LessonWatchView 中是正常的。`);
+        }
+    } catch (error) {
+        // 捕获内部错误，防止它传播回 LessonWatchView
+        console.error("Pinia updateCourseLikeStatus 失败:", error);
     }
   }
 
