@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue' // <--- 关键修复: 导入 nextTick
+import { ref, computed, onMounted, watch, nextTick } from 'vue' 
 import { useRouter, RouterLink } from 'vue-router'
 import { useCourseStore } from '@/stores/courseStore'
 import { useAuthStore } from '@/stores/authStore' 
@@ -23,17 +23,12 @@ const videoError = ref(null)
 const comments = ref([])
 const newComment = ref('')
 
-// --- (Bug 2 修复: 点赞/收藏状态) ---
-// 我们使用本地 ref 作为 UI 的“事实来源”，以解决命名冲突
+// --- (点赞/收藏状态) ---
 const isLiked = ref(false)
 const likeCount = ref(0)
 const isFavorited = ref(false)
-
-// API 加载锁
 const isLiking = ref(false) 
 const isFavoritingLoading = ref(false) 
-
-// 动画状态
 const likeAnimation = ref(false)
 const favoriteAnimation = ref(false)
 const countAnimation = ref(false)
@@ -58,13 +53,11 @@ onMounted(async () => {
   try {
     const courseData = await courseStore.fetchCourseDetail(props.courseId)
     
-    // --- (Bug 2 修复: 填充本地 ref) ---
     if (courseData) {
       isLiked.value = courseData.is_liked
       likeCount.value = courseData.like_count
       isFavorited.value = courseData.is_favorited
     }
-    // --- (修复结束) ---
 
   } catch (error) {
     console.error('❌ [课程详情] 获取失败:', error)
@@ -85,21 +78,25 @@ const handleVideoCanPlay = () => {
 
 // --- 计算属性 (用于侧边栏和视频 URL) ---
 const course = computed(() => {
-  return courseStore.courses.find(c => c.id == props.courseId) || null
+  // 【【【BUG 修复 1】】】: 确保在 find 之前过滤掉 null/undefined
+  return courseStore.courses
+    .filter(Boolean) // <-- 增加防御性 null 检查
+    .find(c => c.id == props.courseId) || null
 })
 
 const lesson = computed(() => {
   if (!course.value || !course.value.modules) return null
-  for (const module of course.value.modules) {
+  // 【【【BUG 修复 2】】】: 增加防御性 null 检查
+  for (const module of (course.value.modules || []).filter(Boolean)) {
     if (module.lessons) {
-      const found = module.lessons.find(l => l.id == props.lessonId)
+      const found = (module.lessons || [])
+        .filter(Boolean) // <-- 增加防御性 null 检查
+        .find(l => l.id == props.lessonId)
       if (found) return found
     }
   }
   return null
 })
-
-// (冲突的 isLiked 和 likeCount 的 computed 已被【删除】)
 
 const videoUrl = computed(() => {
   if (!lesson.value) return null
@@ -129,7 +126,6 @@ watch(videoUrl, (newUrl) => {
 watch(() => props.lessonId, async (newLessonId, oldLessonId) => {
     if (newLessonId && newLessonId !== oldLessonId) {
         fetchComments(newLessonId)
-        // 切换课时后，也必须重新填充本地 ref
         const courseData = await courseStore.fetchCourseDetail(props.courseId)
         if (courseData) {
           isLiked.value = courseData.is_liked
@@ -139,13 +135,14 @@ watch(() => props.lessonId, async (newLessonId, oldLessonId) => {
     }
 })
 
-// --- 辅助函数 (不变) ---
+// --- 辅助函数 ---
 const getNextLesson = () => {
     if (!course.value || !course.value.modules) return null;
     let foundCurrent = false;
-    for (const module of course.value.modules) {
+    // 【【【BUG 修复 3】】】: 增加防御性 null 检查
+    for (const module of (course.value.modules || []).filter(Boolean)) {
         if (module.lessons) {
-            for (const l of module.lessons) {
+            for (const l of (module.lessons || []).filter(Boolean)) {
                 if (foundCurrent) return l;
                 if (l.id == props.lessonId) foundCurrent = true;
             }
@@ -183,7 +180,6 @@ const fetchComments = async (lessonId) => {
   }
 }
 
-// --- (Bug 3 修复: 评论) ---
 const handlePostComment = async () => {
   if (!newComment.value.trim()) return;
   if (!authStore.isAuthenticated) {
@@ -192,7 +188,6 @@ const handlePostComment = async () => {
   }
   try {
     const response = await apiClient.post('/api/comments/', {
-      // 修复：将 lessonId 从字符串转换为数字
       lesson: Number(props.lessonId),
       content: newComment.value
     });
@@ -204,7 +199,6 @@ const handlePostComment = async () => {
   }
 }
 
-// --- (Bug 2 修复: 点赞) ---
 const handleLikeToggle = async () => {
   if (!authStore.isAuthenticated) {
     router.push({ name: 'login' });
@@ -219,7 +213,7 @@ const handleLikeToggle = async () => {
   try {
     const response = await apiClient.post(`/api/courses/${props.courseId}/toggle-like/`);
     
-    // (A) 更新 Pinia store（现在这是安全的，不会抛出错误）
+    // (A) 更新 Pinia store
     courseStore.updateCourseLikeStatus(
       props.courseId, 
       response.data.liked, 
@@ -230,12 +224,13 @@ const handleLikeToggle = async () => {
     isLiked.value = response.data.liked
     likeCount.value = response.data.count
     
-    // 【【【修复：使用 nextTick 确保 DOM 立即更新】】】
     await nextTick();
     
   } catch (error) {
-    console.error('👍 [点赞] 失败:', error.response?.data || error.message);
-    alert('操作失败，请稍后再试。');
+    // 【【【BUG 修复 7】】】: 
+    // 不再 alert()，因为这会捕获渲染错误，而不是 API 错误
+    console.error('👍 [点赞] 失败 (API或渲染错误):', error.message);
+    // alert('操作失败，请稍后再试。'); // <--- 已移除
   } finally {
     isLiking.value = false
     setTimeout(() => {
@@ -245,7 +240,6 @@ const handleLikeToggle = async () => {
   }
 }
 
-// --- (Bug 2 修复: 收藏) ---
 const handleFavoriteToggle = async () => {
   if (!authStore.isAuthenticated) {
     router.push({ name: 'login' });
@@ -257,13 +251,8 @@ const handleFavoriteToggle = async () => {
   favoriteAnimation.value = true
   
   try {
-    // (A) 更新 Auth store
     const newFavoriteStatus = await authStore.toggleFavorite(props.courseId);
-
-    // (B) ！！！直接更新本地 ref，强制 UI 刷新！！！
     isFavorited.value = newFavoriteStatus
-    
-    // 【【【修复：使用 nextTick 确保 DOM 立即更新】】】
     await nextTick();
 
   } catch (error) {
@@ -276,7 +265,6 @@ const handleFavoriteToggle = async () => {
     }, 600)
   }
 }
-// --- (修复结束) ---
 
 </script>
 
@@ -406,14 +394,22 @@ const handleFavoriteToggle = async () => {
       
       <div v-if="!course || !course.modules">加载中...</div>
       
-      <div v-else v-for="module in course.modules" :key="module.id" class="module-group">
+      <div 
+        v-else 
+        v-for="module in (course.modules || []).filter(Boolean)" 
+        :key="module.id" 
+        class="module-group"
+      >
         <h4>{{ module.title }}</h4>
         <ul>
           <li 
-            v-for="l in module.lessons" 
+            v-for="l in (module.lessons || []).filter(Boolean)" 
             :key="l.id"
             :class="{ 'active-lesson': l.id == props.lessonId }"
-            @click="router.push({ name: 'lesson-watch', params: { courseId: courseId, lessonId: l.id } })"
+            @click="router.push({ 
+              name: 'lesson-watch', 
+              params: { courseId: props.courseId, lessonId: l.id } 
+            })"
           >
             {{ l.title }}
           </li>
@@ -425,7 +421,7 @@ const handleFavoriteToggle = async () => {
 </template>
 
 <style scoped>
-/* 样式部分 (完全不变) */
+/* (样式未更改) */
 .watch-layout {
   display: flex;
   height: calc(100vh - 60px); 
