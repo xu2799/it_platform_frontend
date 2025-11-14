@@ -12,8 +12,14 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => !!token.value)
   
-  // --- 【【【已删除】】】 ---
-  // isCourseFavorited computed 属性已被移除
+  const isCourseFavorited = computed(() => {
+    return (courseId) => {
+      if (!user.value || !user.value.favorited_courses) {
+        return false
+      }
+      return user.value.favorited_courses.includes(Number(courseId))
+    }
+  })
 
   async function fetchUser() {
     if (!token.value) {
@@ -80,12 +86,45 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('user')
   }
 
-  // --- 【【【已删除】】】 ---
-  // toggleFavorite 函数已被移除
+  // --- 【【【已修复】】】: 确保 user 对象的更新是响应式的 ---
+  async function toggleFavorite(courseId) {
+    if (!isAuthenticated.value) {
+      alert('请先登录！')
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    try {
+      const response = await apiClient.post(`/api/courses/${courseId}/favorite/`)
+      const { favorited, favorites_list } = response.data
+      
+      if (user.value) {
+        // 【【【关键修复】】】: 
+        // 错误做法: user.value.favorited_courses = favorites_list (这不会触发更新)
+        // 正确做法: 创建一个新对象来替换 user.value
+        
+        const updatedUser = { 
+          ...user.value, 
+          favorited_courses: favorites_list 
+        };
+        
+        console.log('!!! AuthStore 正在更新 user ref (收藏) !!!');
+        user.value = updatedUser; // 替换整个 user ref
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      }
+
+      return { success: true, favorited: favorited }
+
+    } catch (error) {
+      console.error('切换收藏失败:', error)
+      return { success: false, error: 'API error' }
+    }
+  }
+  // --- 【【【修复结束】】】 ---
 
   return { 
     token, user, isAuthenticated, 
-    login, logout, fetchUser
-    // (isCourseFavorited 和 toggleFavorite 已从导出中移除)
+    login, logout, fetchUser,
+    isCourseFavorited,
+    toggleFavorite
   }
 })

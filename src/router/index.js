@@ -87,13 +87,14 @@ const router = createRouter({
       component: () => import('@/views/AdminApplicationsView.vue'), 
       meta: { requiresAuth: true, requiredRole: ['admin'] } 
     },
-    // --- 【【【已删除】】】 ---
-    // {
-    //   path: '/favorites',
-    //   name: 'favorites',
-    //   component: () => import('@/views/FavoritesView.vue'),
-    //   meta: { requiresAuth: true }
-    // },
+    // --- 【【【新增】】】: 重新添加收藏夹路由 ---
+    {
+      path: '/favorites',
+      name: 'favorites',
+      component: () => import('@/views/FavoritesView.vue'), // 我们将在下一步创建这个文件
+      meta: { requiresAuth: true }
+    },
+    // --- 【【【修改结束】】】 ---
   ]
 })
 
@@ -106,10 +107,10 @@ router.beforeEach(async (to, from, next) => {
     const requiredRole = to.meta.requiredRole
     
     // 【【【已修改】】】:
-    // 自动 fetchUser (如果 main.js 还没做的话)
-    // (移除了对 favorited_courses 的检查，因为它不再存在)
-    if (requiresAuth && authStore.token && !authStore.user) {
-        console.log('路由守卫: Token 存在但用户数据缺失, 强制刷新...');
+    // 检查 authStore.user 是否包含 favorited_courses，如果不包含，则强制刷新
+    // (这确保了在登录后或刷新页面后，收藏数据总是最新的)
+    if (requiresAuth && authStore.token && (!authStore.user || authStore.user.favorited_courses === undefined)) {
+        console.log('路由守卫: Token 存在但用户数据(或收藏夹)缺失, 强制刷新...');
         try {
             await authStore.fetchUser();
         } catch (error) {

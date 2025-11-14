@@ -132,7 +132,10 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
                 <RouterLink :to="{ name: 'profile' }" class="dropdown-item">
                   个人资料
                 </RouterLink>
-                
+
+                <RouterLink :to="{ name: 'favorites' }" class="dropdown-item">
+                  我的收藏
+                </RouterLink>
                 <RouterLink 
                   v-if="authStore.user?.role === 'instructor' || authStore.user?.role === 'admin'"
                   :to="{ name: 'instructor-dashboard' }" 
@@ -161,7 +164,7 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
                   退出登录
                 </a>
               </div>
-            </li>
+              </li>
           </ul>
         </nav>
       </div>

@@ -1,29 +1,33 @@
 <script setup>
-import { watch, onMounted } from 'vue' 
-import { RouterLink, useRoute } from 'vue-router'
-import { useCourseStore } from '@/stores/courseStore'
-import { useAuthStore } from '@/stores/authStore' 
+import { ref, onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
+import apiClient from '@/api'
+import BackButton from '@/components/BackButton.vue'
 
-const courseStore = useCourseStore()
-const authStore = useAuthStore() 
-const route = useRoute() 
+const courses = ref([])
+const loading = ref(true)
+const error = ref(null)
 
-onMounted(() => {
-  // --- 【【【修改】】】: 确保 fetchUser 被调用以获取收藏夹数据 ---
-  if (authStore.token && (!authStore.user || authStore.user.favorited_courses === undefined)) {
-      authStore.fetchUser()
+// (API_URL 已移至 apiClient)
+
+onMounted(async () => {
+  loading.value = true
+  error.value = null
+  try {
+    // 调用我们新创建的收藏列表 API
+    const response = await apiClient.get('/api/favorites/')
+    if (response.data.results) {
+        courses.value = response.data.results
+    } else {
+        courses.value = response.data
+    }
+  } catch (err) {
+    console.error('获取收藏课程失败:', err)
+    error.value = '无法加载您收藏的课程。'
+  } finally {
+    loading.value = false
   }
-  // --- 【【【修改结束】】】 ---
 })
-
-watch(() => route.query, (newQuery) => {
-  console.log('路由查询已更改, 正在获取新课程:', newQuery);
-  courseStore.fetchCourses(newQuery);
-}, {
-  immediate: true,
-  deep: true 
-})
-
 
 // --- (辅助函数) ---
 const getFullCoverImagePath = (relativePath) => {
@@ -31,8 +35,9 @@ const getFullCoverImagePath = (relativePath) => {
         if (relativePath.startsWith('http://') || relativePath.startsWith('https://')) {
             return relativePath
         }
-        const API_URL = import.meta.env.VITE_API_URL
-        return `${API_URL}${relativePath}`
+        // 使用 apiClient 的 baseURL
+        const baseUrl = apiClient.defaults.baseURL || ''
+        return `${baseUrl}${relativePath}`
     }
     return 'https://via.placeholder.com/300x150.png?text=No+Cover'
 }
@@ -44,26 +49,24 @@ const handleImageError = (event) => {
 
 <template>
   <div class="course-list-container">
+    <BackButton 
+      :fallback-route="{ name: 'courses' }" 
+      text="返回课程列表"
+      small
+    />
+    <h1 class="page-title">我的收藏</h1>
     
-    <div v-if="route.query.search" class="search-result-header">
-        正在搜索: "<strong>{{ route.query.search }}</strong>"
-        <RouterLink :to="{ name: 'courses', query: { ...route.query, search: undefined } }" class="clear-search">
-            (清除搜索)
-        </RouterLink>
+    <div v-if="loading" class="loading-container">
+      <p>正在加载...</p>
     </div>
 
-    <div v-if="courseStore.isLoading" class="loading-container">
-      <p>正在加载课程...</p>
+    <div v-else-if="error" class="error-container">
+      <p class="error-message">{{ error }}</p>
     </div>
 
-    <div v-else-if="courseStore.error" class="error-container">
-      <p class="error-message">{{ courseStore.error }}</p>
-      <button @click="courseStore.fetchCourses(route.query)" class="retry-button">重试</button>
-    </div>
-
-    <section v-else class="course-grid">
+    <section v-else-if="courses.length > 0" class="course-grid">
       <div 
-        v-for="course in courseStore.courses" 
+        v-for="course in courses" 
         :key="course.id" 
         class="course-card"
       >
@@ -89,37 +92,31 @@ const handleImageError = (event) => {
               <span class="like-stats">
                 👍 {{ course.like_count || 0 }}
               </span>
-              </div>
+            </div>
           </div>
         </RouterLink>
       </div>
     </section>
     
-    <div v-if="!courseStore.isLoading && !courseStore.error && (!courseStore.courses || courseStore.courses.length === 0)" class="no-results">
-        <p>没有找到符合条件的课程。</p>
+    <div v-else class="no-results">
+        <p>你还没有收藏任何课程。</p>
+        <RouterLink :to="{ name: 'courses' }" class="nav-button">
+            去逛逛课程
+        </RouterLink>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* (容器样式不变) */
+/* (样式与 CourseListView 类似) */
 .course-list-container {
     padding: 20px 40px; 
 }
-
-.search-result-header {
+.page-title {
     text-align: center;
-    margin: 10px 0 30px 0;
-    font-size: 1.1rem;
-    color: #555;
+    font-size: 2rem;
+    margin-bottom: 30px;
 }
-.clear-search {
-    margin-left: 10px;
-    font-size: 0.9rem;
-    color: #007bff;
-}
-
-/* (卡片网格样式不变) */
 .course-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -137,7 +134,7 @@ const handleImageError = (event) => {
     border-radius: 10px;
     overflow: hidden; 
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); 
-    transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.3s;
+    transition: transform 0.3s, box-shadow 0.3s;
     display: flex; 
     flex-direction: column; 
 }
@@ -164,7 +161,6 @@ const handleImageError = (event) => {
     border-radius: 4px;
     font-size: 0.9rem;
     font-weight: bold;
-    z-index: 10;
     position: absolute;
     top: 8px;
     left: 8px;
@@ -181,16 +177,7 @@ const handleImageError = (event) => {
     margin-top: 0;
     margin-bottom: 8px;
     color: #2c3e50;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    white-space: normal;
-    line-height: 1.5em;
-    max-height: 3em; 
 }
-
-/* (底部信息栏样式不变) */
 .card-footer-stats {
     display: flex;
     justify-content: space-between;
@@ -200,48 +187,26 @@ const handleImageError = (event) => {
 .instructor-name {
     font-size: 0.85rem;
     color: #7f8c8d;
-    margin: 0;
 }
-/* --- 【【【新增】】】: 重新添加点赞样式 --- */
 .like-stats {
     font-size: 0.9rem;
     color: #34495e;
     font-weight: 500;
 }
-/* --- 【【【修改结束】】】 --- */
-
-/* 加载和错误状态 (不变) */
-.loading-container {
+.loading-container, .error-container, .no-results {
     text-align: center;
     padding: 50px;
     font-size: 1.2rem;
     color: #555;
 }
-.error-container {
-    text-align: center;
-    padding: 50px;
-}
-.error-message {
-    color: #dc3545;
+.error-message { color: #dc3545; }
+.no-results .nav-button {
+    margin-top: 20px;
     font-size: 1.1rem;
-    margin-bottom: 20px;
-}
-.retry-button {
-    padding: 10px 20px;
     background-color: #007bff;
     color: white;
-    border: none;
+    text-decoration: none;
+    padding: 12px 20px;
     border-radius: 5px;
-    cursor: pointer;
-    font-size: 1rem;
-}
-.retry-button:hover {
-    background-color: #0056b3;
-}
-.no-results {
-    text-align: center;
-    padding: 50px;
-    font-size: 1.2rem;
-    color: #777;
 }
 </style>
