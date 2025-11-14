@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue' 
+import { ref, computed, onMounted, watch } from 'vue' // <-- 移除了 nextTick
 import { useRouter, RouterLink } from 'vue-router'
 import { useCourseStore } from '@/stores/courseStore'
 import { useAuthStore } from '@/stores/authStore' 
@@ -23,15 +23,8 @@ const videoError = ref(null)
 const comments = ref([])
 const newComment = ref('')
 
-// --- (点赞/收藏状态) ---
-const isLiked = ref(false)
-const likeCount = ref(0)
-const isFavorited = ref(false)
-const isLiking = ref(false) 
-const isFavoritingLoading = ref(false) 
-const likeAnimation = ref(false)
-const favoriteAnimation = ref(false)
-const countAnimation = ref(false)
+// --- 【【【已删除】】】 ---
+// (所有点赞/收藏相关的 ref 已被移除)
 // --- (修复结束) ---
 
 const resolveMediaUrl = (url) => {
@@ -51,14 +44,7 @@ onMounted(async () => {
   console.log('🌐 [调试] 课程ID:', props.courseId)
   console.log('🌐 [调试] 课时ID:', props.lessonId)
   try {
-    const courseData = await courseStore.fetchCourseDetail(props.courseId)
-    
-    if (courseData) {
-      isLiked.value = courseData.is_liked
-      likeCount.value = courseData.like_count
-      isFavorited.value = courseData.is_favorited
-    }
-
+    await courseStore.fetchCourseDetail(props.courseId)
   } catch (error) {
     console.error('❌ [课程详情] 获取失败:', error)
   }
@@ -78,19 +64,20 @@ const handleVideoCanPlay = () => {
 
 // --- 计算属性 (用于侧边栏和视频 URL) ---
 const course = computed(() => {
-  // 【【【BUG 修复 1】】】: 确保在 find 之前过滤掉 null/undefined
   return courseStore.courses
-    .filter(Boolean) // <-- 增加防御性 null 检查
+    .filter(Boolean) 
     .find(c => c.id == props.courseId) || null
 })
 
+// --- 【【【已删除】】】 ---
+// (isLiked, likeCount, isFavorited computed 属性已被移除)
+
 const lesson = computed(() => {
   if (!course.value || !course.value.modules) return null
-  // 【【【BUG 修复 2】】】: 增加防御性 null 检查
   for (const module of (course.value.modules || []).filter(Boolean)) {
     if (module.lessons) {
       const found = (module.lessons || [])
-        .filter(Boolean) // <-- 增加防御性 null 检查
+        .filter(Boolean) 
         .find(l => l.id == props.lessonId)
       if (found) return found
     }
@@ -126,12 +113,7 @@ watch(videoUrl, (newUrl) => {
 watch(() => props.lessonId, async (newLessonId, oldLessonId) => {
     if (newLessonId && newLessonId !== oldLessonId) {
         fetchComments(newLessonId)
-        const courseData = await courseStore.fetchCourseDetail(props.courseId)
-        if (courseData) {
-          isLiked.value = courseData.is_liked
-          likeCount.value = courseData.like_count
-          isFavorited.value = courseData.is_favorited
-        }
+        await courseStore.fetchCourseDetail(props.courseId)
     }
 })
 
@@ -139,7 +121,6 @@ watch(() => props.lessonId, async (newLessonId, oldLessonId) => {
 const getNextLesson = () => {
     if (!course.value || !course.value.modules) return null;
     let foundCurrent = false;
-    // 【【【BUG 修复 3】】】: 增加防御性 null 检查
     for (const module of (course.value.modules || []).filter(Boolean)) {
         if (module.lessons) {
             for (const l of (module.lessons || []).filter(Boolean)) {
@@ -167,7 +148,7 @@ const goToCourseHome = () => {
 }
 
 
-// --- 点赞和评论功能 ---
+// --- 评论功能 (点赞和收藏已删除) ---
 const fetchComments = async (lessonId) => {
   if (!lessonId) return;
   try {
@@ -199,72 +180,9 @@ const handlePostComment = async () => {
   }
 }
 
-const handleLikeToggle = async () => {
-  if (!authStore.isAuthenticated) {
-    router.push({ name: 'login' });
-    return;
-  }
-  if (isLiking.value) return; 
-  
-  isLiking.value = true
-  likeAnimation.value = true
-  countAnimation.value = true 
-  
-  try {
-    const response = await apiClient.post(`/api/courses/${props.courseId}/toggle-like/`);
-    
-    // (A) 更新 Pinia store
-    courseStore.updateCourseLikeStatus(
-      props.courseId, 
-      response.data.liked, 
-      response.data.count
-    )
-    
-    // (B) ！！！直接更新本地 ref，强制 UI 刷新！！！
-    isLiked.value = response.data.liked
-    likeCount.value = response.data.count
-    
-    await nextTick();
-    
-  } catch (error) {
-    // 【【【BUG 修复 7】】】: 
-    // 不再 alert()，因为这会捕获渲染错误，而不是 API 错误
-    console.error('👍 [点赞] 失败 (API或渲染错误):', error.message);
-    // alert('操作失败，请稍后再试。'); // <--- 已移除
-  } finally {
-    isLiking.value = false
-    setTimeout(() => {
-      likeAnimation.value = false
-      countAnimation.value = false
-    }, 600)
-  }
-}
-
-const handleFavoriteToggle = async () => {
-  if (!authStore.isAuthenticated) {
-    router.push({ name: 'login' });
-    return;
-  }
-  if (isFavoritingLoading.value) return; 
-  
-  isFavoritingLoading.value = true
-  favoriteAnimation.value = true
-  
-  try {
-    const newFavoriteStatus = await authStore.toggleFavorite(props.courseId);
-    isFavorited.value = newFavoriteStatus
-    await nextTick();
-
-  } catch (error) {
-    console.error('收藏失败:', error);
-    alert('操作失败，请稍后再试。');
-  } finally {
-    isFavoritingLoading.value = false
-    setTimeout(() => {
-      favoriteAnimation.value = false
-    }, 600)
-  }
-}
+// --- 【【【已删除】】】 ---
+// (handleLikeToggle 函数已被移除)
+// (handleFavoriteToggle 函数已被移除)
 
 </script>
 
@@ -285,12 +203,9 @@ const handleFavoriteToggle = async () => {
         <p>正在加载课程数据...</p>
       </div>
       
-      <div v-else-if="!course.modules || !lesson">
-        <p>正在加载课时...</p>
-      </div>
-      
       <div v-else>
-        <h2>{{ lesson.title }}</h2>
+        <h2 v-if="lesson">{{ lesson.title }}</h2>
+        <h2 v-else>正在加载课时...</h2>
         
         <div v-if="videoUrl" class="video-container">
           <video
@@ -315,48 +230,18 @@ const handleFavoriteToggle = async () => {
           </div>
         </div>
         
-        <div v-else-if="lesson.lesson_type === 'text'">
+        <div v-else-if="lesson && lesson.lesson_type === 'text'">
            <div class="text-content" v-html="lesson.content"></div>
         </div>
         
+        <div v-else-if="!lesson">
+            </div>
+
         <div v-else>
             <p>无法加载此课时。</p>
         </div>
 
         <div class="video-actions">
-          <button 
-            @click="handleLikeToggle" 
-            :class="['action-btn', 'like-btn', { 
-              liked: isLiked, 
-              animating: likeAnimation,
-              loading: isLiking
-            }]"
-            :disabled="isLiking"
-          >
-            <span class="like-icon" :class="{ 'bounce': likeAnimation }">
-              {{ isLiked ? '❤️' : '♡' }}
-            </span>
-            <span class="like-text">{{ isLiked ? '已点赞' : '点赞' }}</span>
-            <span class="like-count" :class="{ 'count-bounce': countAnimation }">
-              ({{ likeCount }})
-            </span>
-          </button>
-          
-          <button 
-            @click="handleFavoriteToggle" 
-            :class="['action-btn', 'favorite-btn', { 
-              favorited: isFavorited,
-              animating: favoriteAnimation,
-              loading: isFavoritingLoading
-            }]"
-            :disabled="isFavoritingLoading"
-          >
-            <span class="favorite-icon" :class="{ 'spin': favoriteAnimation }">
-              {{ isFavorited ? '⭐' : '☆' }}
-            </span>
-            <span class="favorite-text">{{ isFavorited ? '已收藏' : '收藏' }}</span>
-          </button>
-
           <button @click="goToNextLesson" class="action-btn next-lesson-btn">
             下一课 &raquo;
           </button>
@@ -527,119 +412,13 @@ const handleFavoriteToggle = async () => {
 .next-lesson-btn {
     background-color: #28a745;
     color: white;
-    margin-left: auto;
+    margin-left: auto; /* <-- 让"下一课"按钮保持在最右边 */
 }
 .next-lesson-btn:hover { background-color: #218838; }
-.like-btn {
-  background-color: #f0f0f0;
-  color: #333;
-  transition: all 0.3s ease;
-}
-.like-btn.liked {
-  background-color: #ff1744;
-  color: white;
-  box-shadow: 0 2px 8px rgba(255, 23, 68, 0.3);
-}
-.like-btn.animating {
-  animation: like-pulse 0.6s ease;
-}
-.like-icon {
-  display: inline-block;
-  font-size: 1.2em;
-  transition: transform 0.3s ease;
-}
-.like-icon.bounce {
-  animation: like-bounce 0.6s ease;
-}
-.like-text {
-  font-weight: 500;
-}
-.like-count {
-  font-weight: bold;
-  transition: transform 0.3s ease;
-}
-.like-count.count-bounce {
-  animation: count-bounce 0.6s ease;
-}
-.favorite-btn {
-  background-color: #f0f0f0;
-  color: #333;
-  transition: all 0.3s ease;
-}
-.favorite-btn.favorited {
-  background-color: #ffa726;
-  color: white;
-  box-shadow: 0 2px 8px rgba(255, 167, 38, 0.3);
-}
-.favorite-btn.animating {
-  animation: favorite-pulse 0.6s ease;
-}
-.favorite-icon {
-  display: inline-block;
-  font-size: 1.2em;
-  transition: transform 0.3s ease;
-}
-.favorite-icon.spin {
-  animation: favorite-spin 0.6s ease;
-}
-.favorite-text {
-  font-weight: 500;
-}
-@keyframes like-bounce {
-  0%, 100% {
-    transform: scale(1);
-  }
-  25% {
-    transform: scale(1.3) rotate(-5deg);
-  }
-  50% {
-    transform: scale(1.2) rotate(5deg);
-  }
-  75% {
-    transform: scale(1.1);
-  }
-}
-@keyframes like-pulse {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.05);
-  }
-}
-@keyframes count-bounce {
-  0%, 100% {
-    transform: scale(1);
-  }
-  25% {
-    transform: scale(1.3) translateY(-5px);
-  }
-  50% {
-    transform: scale(1.2) translateY(0);
-  }
-  75% {
-    transform: scale(1.1);
-  }
-}
-@keyframes favorite-spin {
-  0% {
-    transform: rotate(0deg) scale(1);
-  }
-  50% {
-    transform: rotate(180deg) scale(1.3);
-  }
-  100% {
-    transform: rotate(360deg) scale(1);
-  }
-}
-@keyframes favorite-pulse {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.05);
-  }
-}
+
+/* --- 【【【已删除】】】 --- */
+/* (所有 .like-btn, .favorite-btn, 和 @keyframes 动画样式均已移除) */
+
 .comments-section {
   max-width: 900px;
   margin: 40px auto 0 auto;

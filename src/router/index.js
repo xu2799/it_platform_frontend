@@ -87,37 +87,32 @@ const router = createRouter({
       component: () => import('@/views/AdminApplicationsView.vue'), 
       meta: { requiresAuth: true, requiredRole: ['admin'] } 
     },
-    {
-      path: '/favorites',
-      name: 'favorites',
-      component: () => import('@/views/FavoritesView.vue'),
-      meta: { requiresAuth: true }
-    },
+    // --- 【【【已删除】】】 ---
+    // {
+    //   path: '/favorites',
+    //   name: 'favorites',
+    //   component: () => import('@/views/FavoritesView.vue'),
+    //   meta: { requiresAuth: true }
+    // },
   ]
 })
 
 
-// 全局路由守卫
+// 全局路由守卫 (不变)
 router.beforeEach(async (to, from, next) => {
     
     const authStore = useAuthStore()
     const requiresAuth = to.meta.requiresAuth
     const requiredRole = to.meta.requiredRole
-    const token = authStore.token
-    let user = authStore.user
-
-    // 1. 检查是否需要刷新用户数据
-    // (A) Token 存在
-    // (B) user 不存在 (刚加载) 
-    // (C) user 存在但数据是旧的 (缺少 favorited_courses)
-    if (requiresAuth && token && (!user || user.favorited_courses === undefined)) {
-        console.log('路由守卫: Token 存在但用户数据陈旧/缺失, 强制刷新...');
+    
+    // 【【【已修改】】】:
+    // 自动 fetchUser (如果 main.js 还没做的话)
+    // (移除了对 favorited_courses 的检查，因为它不再存在)
+    if (requiresAuth && authStore.token && !authStore.user) {
+        console.log('路由守卫: Token 存在但用户数据缺失, 强制刷新...');
         try {
             await authStore.fetchUser();
-            // 刷新本地 user 变量
-            user = authStore.user; 
         } catch (error) {
-            // fetchUser 失败 (例如 token 过期), 强制登出
             authStore.logout();
             return next({ name: 'login' });
         }
@@ -130,8 +125,7 @@ router.beforeEach(async (to, from, next) => {
     }
 
     // 3. 检查角色权限
-    // (此时 user 应该是最新的)
-    if (requiresAuth && requiredRole && user && !requiredRole.includes(user.role)) {
+    if (requiresAuth && requiredRole && authStore.user && !requiredRole.includes(authStore.user.role)) {
         console.log('路由守卫: 拒绝访问 (权限不足)');
         alert('你没有访问此页面的权限。');
         return next({ name: 'home' });

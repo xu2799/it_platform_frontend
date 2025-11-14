@@ -91,7 +91,6 @@ export const useCourseStore = defineStore('courses', () => {
       return
     }
     try {
-      // (我引入的语法错误已删除)
       console.log('Pinia: 正在获取课程分类...')
       const response = await apiClient.get('/api/categories/')
       
@@ -111,28 +110,9 @@ export const useCourseStore = defineStore('courses', () => {
     isStale.value = true
   }
 
-  // 【【【 ！！！ 关键修复 ！！！ 】】】
-  // 我们必须让这个函数更安全，以防 courseToUpdate 为 undefined
-  function updateCourseLikeStatus(courseId, isLiked, likeCount) {
-    try {
-        const courseToUpdate = courses.value.find(c => c.id == courseId);
-        
-        if (courseToUpdate) {
-            console.log(`Pinia: 正在响应式地更新课程 ${courseId} (直接修改属性)`);
-            
-            courseToUpdate.is_liked = isLiked;
-            courseToUpdate.like_count = likeCount;
-            
-            isStale.value = true;
-        } else {
-            console.warn(`Pinia: (updateCourseLikeStatus) 未能在 store 中找到 courseId ${courseId}。这在 LessonWatchView 中是正常的。`);
-        }
-    } catch (error) {
-        // 捕获内部错误，防止它传播回 LessonWatchView
-        console.error("Pinia updateCourseLikeStatus 失败:", error);
-    }
-  }
-
+  // --- 【【【已删除】】】 ---
+  // updateCourseLikeStatus 函数已被移除
+  // updateCourseFavoriteStatus 函数已被移除
 
   return { 
     courses, 
@@ -142,7 +122,7 @@ export const useCourseStore = defineStore('courses', () => {
     fetchCourses, 
     fetchCourseDetail, 
     fetchCategories, 
-    markAsStale,
-    updateCourseLikeStatus
+    markAsStale
+    // (update 函数已从导出中移除)
   }
 })

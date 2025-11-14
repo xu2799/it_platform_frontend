@@ -1,7 +1,7 @@
 <script setup>
 import { RouterLink, RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore' 
-import { useCourseStore } from '@/stores/courseStore' // <-- 这就是出错的第 4 行
+import { useCourseStore } from '@/stores/courseStore' 
 import { computed, ref, onMounted } from 'vue' 
 
 const authStore = useAuthStore()
@@ -133,10 +133,6 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
                   个人资料
                 </RouterLink>
                 
-                <RouterLink :to="{ name: 'favorites' }" class="dropdown-item">
-                  我的收藏
-                </RouterLink>
-
                 <RouterLink 
                   v-if="authStore.user?.role === 'instructor' || authStore.user?.role === 'admin'"
                   :to="{ name: 'instructor-dashboard' }" 
@@ -178,8 +174,7 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
 </template>
 
 <style>
-/* ... (全局样式 base.css/main.css 位于 assets 目录，此处省略) */
-
+/* (样式不变, 此处省略) */
 /* 顶部导航栏 (不变) */
 .app-header {
   background-color: #3498db; 
@@ -219,9 +214,6 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
   display: flex;
   gap: 25px;
   align-items: center; 
-}
-.navbar-main > ul > li {
-  /* (已在上一轮修复中移除) */
 }
 .navbar-main > ul > li > a {
   color: #ecf0f1; 
@@ -422,15 +414,10 @@ const adminUrl = computed(() => `${API_URL}/admin/`)
 .dropdown-content .dropdown-item.logout-item:hover {
   color: #a94442 !important;
 }
-
-
-/* 主内容区 (不变) */
 .app-main {
   padding: 0; 
   flex-grow: 1; 
   width: 100%;
-  /* max-width: 1200px; */  /* <-- 已移除 */
-  /* margin: 0 auto; */     /* <-- 已移除 */
   box-sizing: border-box;
   background-color: #ffffff; 
 }

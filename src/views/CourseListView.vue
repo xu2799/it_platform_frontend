@@ -1,5 +1,5 @@
 <script setup>
-import { watch, onMounted } from 'vue' // <-- 【【【已修改】】】: 移除了 ref
+import { watch, onMounted } from 'vue' 
 import { RouterLink, useRoute } from 'vue-router'
 import { useCourseStore } from '@/stores/courseStore'
 import { useAuthStore } from '@/stores/authStore' 
@@ -7,8 +7,6 @@ import { useAuthStore } from '@/stores/authStore'
 const courseStore = useCourseStore()
 const authStore = useAuthStore() 
 const route = useRoute() 
-
-// 【【【已移除】】】: hoveredCourseId (未被使用)
 
 onMounted(() => {
   if (authStore.token && !authStore.user) {
@@ -43,8 +41,6 @@ const handleImageError = (event) => {
     // 图片加载失败时使用占位符
     event.target.src = 'https://via.placeholder.com/300x150.png?text=No+Cover'
 }
-
-// 【【【已移除】】】: isCourseOwner (此页面不再需要)
 </script>
 
 <template>
@@ -57,18 +53,15 @@ const handleImageError = (event) => {
         </RouterLink>
     </div>
 
-    <!-- 加载状态 -->
     <div v-if="courseStore.isLoading" class="loading-container">
       <p>正在加载课程...</p>
     </div>
 
-    <!-- 错误状态 -->
     <div v-else-if="courseStore.error" class="error-container">
       <p class="error-message">{{ courseStore.error }}</p>
       <button @click="courseStore.fetchCourses(route.query)" class="retry-button">重试</button>
     </div>
 
-    <!-- 课程列表 -->
     <section v-else class="course-grid">
       <div 
         v-for="course in courseStore.courses" 
@@ -94,10 +87,7 @@ const handleImageError = (event) => {
               <span class="instructor-name">
                 讲师: {{ course.instructor?.username || '平台认证' }}
               </span>
-              <span class="like-stats">
-                ❤️ {{ course.like_count || 0 }}
-              </span>
-            </div>
+              </div>
           </div>
         </RouterLink>
       </div>
@@ -210,13 +200,8 @@ const handleImageError = (event) => {
     color: #7f8c8d;
     margin: 0;
 }
-.like-stats {
-    font-size: 0.9rem;
-    color: #555;
-    font-weight: bold;
-}
-
-/* 【【【已移除】】】: .card-admin-actions 和 .edit-button 的样式 */
+/* --- 【【【已删除】】】 --- */
+/* .like-stats 样式已被移除 */
 
 /* 加载和错误状态 */
 .loading-container {
